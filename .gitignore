@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+MODULE_TYPE_CONFIGURATION.md
 
 # next.js
 /.next/
@@ -32,6 +33,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+
+# Google service account keys (never commit)
+/credentials/*.json
 
 # vercel
 .vercel

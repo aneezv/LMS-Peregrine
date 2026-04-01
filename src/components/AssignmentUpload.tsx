@@ -1,0 +1,380 @@
+'use client'
+
+import { useCallback, useEffect, useState } from 'react'
+import { createClient } from '@/utils/supabase/client'
+import {
+  MAX_FILE_BYTES,
+  MAX_FILES_PER_SUBMISSION,
+  isAllowedAssignmentMime,
+} from '@/lib/assignment-files'
+import {
+  Upload,
+  CheckCircle2,
+  AlertCircle,
+  FileText,
+  Loader2,
+  Send,
+  Undo2,
+  Trash2,
+} from 'lucide-react'
+
+type ApiFile = {
+  id: string
+  file_url: string
+  original_name: string
+}
+
+type ApiSubmission = {
+  id: string
+  isTurnedIn: boolean
+  turnedInAt: string | null
+  score: number | null
+  feedback: string | null
+  gradedAt: string | null
+  isPassed: boolean | null
+  maxScore: number | null
+  passingScore: number | null
+} | null
+
+export default function AssignmentUpload({ assignmentId }: { assignmentId: string }) {
+  const [loading, setLoading] = useState(true)
+  const [submission, setSubmission] = useState<ApiSubmission>(null)
+  const [files, setFiles] = useState<ApiFile[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [errorMsg, setErrorMsg] = useState('')
+
+  const load = useCallback(async () => {
+    setErrorMsg('')
+    const res = await fetch(
+      `/api/assignments/submission?assignmentId=${encodeURIComponent(assignmentId)}`,
+    )
+    const data = (await res.json()) as {
+      submission: ApiSubmission
+      files: {
+        id: string
+        file_url: string
+        original_name: string
+      }[]
+      error?: string
+    }
+    if (!res.ok) {
+      setErrorMsg(data.error ?? 'Could not load submission.')
+      setLoading(false)
+      return
+    }
+    setSubmission(data.submission)
+    setFiles(
+      (data.files ?? []).map((f) => ({
+        id: f.id,
+        file_url: f.file_url,
+        original_name: f.original_name,
+      })),
+    )
+    setLoading(false)
+  }, [assignmentId])
+
+  useEffect(() => {
+    setLoading(true)
+    void load()
+  }, [load])
+
+  const graded = !!submission?.gradedAt
+  const turnedIn = !!submission?.isTurnedIn
+  const canEdit = !graded && !turnedIn
+  const canUnsubmit = !graded && turnedIn
+  const statusLabel = graded ? 'Graded' : turnedIn ? 'Turned in' : 'Draft'
+
+  /** Pass a snapshot `Array.from(input.files)` so the list survives input reset after await. */
+  async function handleAddFiles(picked: File[]) {
+    const list = picked
+    if (!list.length) return
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setErrorMsg('You must be signed in.')
+      return
+    }
+    if (files.length + list.length > MAX_FILES_PER_SUBMISSION) {
+      setErrorMsg(`You can attach up to ${MAX_FILES_PER_SUBMISSION} files.`)
+      return
+    }
+
+    for (const file of list) {
+      if (file.size > MAX_FILE_BYTES) {
+        setErrorMsg(`"${file.name}" is too large (max ${Math.floor(MAX_FILE_BYTES / (1024 * 1024))} MB per file).`)
+        return
+      }
+      const mime = file.type
+      if (!isAllowedAssignmentMime(mime, file.name)) {
+        setErrorMsg(`"${file.name}" is not an allowed type (PDF, Word, or images).`)
+        return
+      }
+    }
+
+    setUploading(true)
+    setErrorMsg('')
+    try {
+      for (const file of list) {
+        const formData = new FormData()
+        formData.set('file', file)
+        formData.set('assignmentId', assignmentId)
+        const res = await fetch('/api/assignments/upload', { method: 'POST', body: formData })
+        const payload = (await res.json().catch(() => ({}))) as { error?: string }
+        if (!res.ok) {
+          setErrorMsg(payload.error ?? 'Upload failed.')
+          break
+        }
+      }
+      await load()
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function removeFile(fileId: string) {
+    setActionLoading(true)
+    setErrorMsg('')
+    try {
+      const q =
+        fileId === 'legacy'
+          ? `?assignmentId=${encodeURIComponent(assignmentId)}`
+          : ''
+      const res = await fetch(`/api/assignments/files/${encodeURIComponent(fileId)}${q}`, {
+        method: 'DELETE',
+      })
+      const payload = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) {
+        setErrorMsg(payload.error ?? 'Could not remove file.')
+        return
+      }
+      await load()
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  async function turnIn() {
+    setActionLoading(true)
+    setErrorMsg('')
+    try {
+      const res = await fetch('/api/assignments/turn-in', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignmentId }),
+      })
+      const payload = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) {
+        setErrorMsg(payload.error ?? 'Could not turn in.')
+        return
+      }
+      await load()
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  async function unsubmit() {
+    setActionLoading(true)
+    setErrorMsg('')
+    try {
+      const res = await fetch('/api/assignments/unsubmit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignmentId }),
+      })
+      const payload = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) {
+        setErrorMsg(payload.error ?? 'Could not unsubmit.')
+        return
+      }
+      await load()
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-slate-500 py-8 justify-center">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        Loading…
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-slate-800">Submission status</p>
+          <span
+            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+              graded
+                ? 'bg-emerald-100 text-emerald-700'
+                : turnedIn
+                ? 'bg-blue-100 text-blue-700'
+                : 'bg-slate-200 text-slate-700'
+            }`}
+          >
+            {statusLabel}
+          </span>
+        </div>
+        {turnedIn && submission?.turnedInAt && !graded && (
+          <p className="mt-1 text-xs text-slate-600">
+            Submitted on {new Date(submission.turnedInAt).toLocaleString()}
+          </p>
+        )}
+        {!turnedIn && !graded && (
+          <p className="mt-1 text-xs text-slate-600">
+            Add your files and click <span className="font-semibold">Turn in</span> when ready.
+          </p>
+        )}
+      </div>
+
+      {errorMsg && (
+        <div className="flex items-center gap-3 text-red-700 bg-red-50 border border-red-200 rounded-lg p-4">
+          <AlertCircle className="h-5 w-5 flex-shrink-0" />
+          <p className="text-sm">{errorMsg}</p>
+        </div>
+      )}
+
+      {graded && submission && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-2">
+          <div className="flex items-center gap-2 text-emerald-800 font-semibold">
+            <CheckCircle2 className="h-5 w-5" />
+            Graded
+          </div>
+          <p className="text-sm text-emerald-900">
+            Score:{' '}
+            <strong>
+              {submission.score ?? '—'}
+              {submission.maxScore != null ? ` / ${submission.maxScore}` : ''}
+            </strong>
+            {submission.isPassed != null && (
+              <span className="ml-2">
+                ({submission.isPassed ? 'Passed' : 'Not passed'})
+              </span>
+            )}
+          </p>
+          {submission.feedback && (
+            <p className="text-sm text-emerald-900 whitespace-pre-wrap">
+              <span className="font-medium">Feedback:</span> {submission.feedback}
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-slate-700">Your work</p>
+        {files.length === 0 ? (
+          <p className="text-sm text-slate-500">No files attached yet.</p>
+        ) : (
+          <ul className="space-y-2">
+            {files.map((f) => (
+              <li
+                key={f.id}
+                className="border border-slate-200 rounded-xl p-3 flex items-center justify-between bg-white shadow-sm gap-3"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="p-2 bg-blue-50 text-blue-600 rounded-lg flex-shrink-0">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-900 truncate">{f.original_name}</p>
+                    <a
+                      href={f.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      Open in Google Drive
+                    </a>
+                  </div>
+                </div>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => void removeFile(f.id)}
+                    disabled={actionLoading || uploading}
+                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition flex-shrink-0"
+                    title="Remove"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {canEdit && (
+        <label className="border-2 border-dashed border-slate-300 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition">
+          {uploading ? (
+            <Loader2 className="h-8 w-8 text-blue-500 animate-spin mb-2" />
+          ) : (
+            <Upload className="h-8 w-8 text-slate-300 mb-2" />
+          )}
+          <p className="text-slate-600 font-medium text-sm text-center">Add files</p>
+          <p className="text-slate-400 text-xs mt-1 text-center">
+            PDF, Word, images · Up to {MAX_FILES_PER_SUBMISSION} files ·{' '}
+            {Math.floor(MAX_FILE_BYTES / (1024 * 1024))} MB each
+          </p>
+          <input
+            type="file"
+            multiple
+            className="sr-only"
+            accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.webp,application/pdf,image/*"
+            disabled={uploading || files.length >= MAX_FILES_PER_SUBMISSION}
+            onChange={(e) => {
+              const snapshot = e.target.files ? Array.from(e.target.files) : []
+              e.target.value = ''
+              void handleAddFiles(snapshot)
+            }}
+          />
+        </label>
+      )}
+
+      {!graded && (
+        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => void turnIn()}
+              disabled={
+                actionLoading ||
+                uploading ||
+                files.length === 0
+              }
+              className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3 px-6 rounded-lg shadow transition"
+            >
+              {actionLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Send className="h-5 w-5" />
+              )}
+              Turn in
+            </button>
+          )}
+          {canUnsubmit && (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full">
+              <p className="text-sm text-slate-600 flex-1">
+                Your work is turned in. Unsubmit if you need to change or add files.
+              </p>
+              <button
+                type="button"
+                onClick={() => void unsubmit()}
+                disabled={actionLoading}
+                className="inline-flex items-center justify-center gap-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-semibold py-3 px-6 rounded-lg transition"
+              >
+                <Undo2 className="h-5 w-5" />
+                Unsubmit
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
