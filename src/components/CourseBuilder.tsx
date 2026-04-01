@@ -30,6 +30,7 @@ import {
   Loader2,
   CheckCircle2,
   Trash2,
+  Upload,
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -40,6 +41,7 @@ import {
   unlockAtForWeek,
 } from '@/lib/unlock-schedule'
 import { syncQuizAndExternalForModule } from '@/lib/sync-module-quiz-external'
+import { toRenderableImageUrl } from '@/lib/drive-image'
 
 type ModuleType =
   | 'video'
@@ -193,7 +195,7 @@ async function syncAssignmentForModule(
 const makeModule = (weekIndex = 1): ModuleItem => ({
   id: newClientId(),
   dbId: null,
-  title: 'New Module',
+  title: 'New Lesson',
   type: 'video',
   week_index: Math.max(1, Math.trunc(Number(weekIndex)) || 1),
   unlock_mode: 'auto',
@@ -363,6 +365,8 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
     { id: string; full_name: string | null; role: string }[]
   >([])
   const [selectedInstructorId, setSelectedInstructorId] = useState('')
+  const [thumbnailUploading, setThumbnailUploading] = useState(false)
+  const [thumbnailUploadError, setThumbnailUploadError] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -698,6 +702,36 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
     })
   }
 
+  async function uploadThumbnail(file: File) {
+    if (!(file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg)$/i.test(file.name))) {
+      setThumbnailUploadError('Please select an image file (PNG, JPG, GIF, WEBP, or SVG).')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setThumbnailUploadError('Thumbnail must be under 5 MB.')
+      return
+    }
+
+    setThumbnailUploading(true)
+    setThumbnailUploadError('')
+    try {
+      const formData = new FormData()
+      formData.set('file', file)
+      const res = await fetch('/api/courses/thumbnail-upload', {
+        method: 'POST',
+        body: formData,
+      })
+      const payload = (await res.json().catch(() => ({}))) as { fileUrl?: string; error?: string }
+      if (!res.ok || !payload.fileUrl) {
+        setThumbnailUploadError(payload.error ?? 'Could not upload thumbnail.')
+        return
+      }
+      setThumbnailUrl(payload.fileUrl)
+    } finally {
+      setThumbnailUploading(false)
+    }
+  }
+
   const handleSave = async (publish: boolean) => {
     if (!title.trim()) { setError('Course title is required.'); return }
     if (!courseCode.trim()) { setError('Course code is required.'); return }
@@ -798,7 +832,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
             .select('id')
             .single()
           if (insErr || !dbMod) {
-            setError(insErr?.message ?? 'Failed to add module.')
+            setError(insErr?.message ?? 'Failed to add lesson.')
             setSaving(false)
             return
           }
@@ -862,7 +896,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         .single()
 
       if (mErr || !dbMod) {
-        setError(mErr?.message ?? 'Failed to create module.')
+        setError(mErr?.message ?? 'Failed to create lesson.')
         setSaving(false)
         return
       }
@@ -887,7 +921,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
 
   const handleDeleteCourse = async () => {
     if (!courseId) return
-    if (!confirm('Delete this course and all related modules and data? This cannot be undone.')) return
+    if (!confirm('Delete this course and all related lessons and data? This cannot be undone.')) return
     setDeleting(true)
     setError('')
     const supabase = createClient()
@@ -933,7 +967,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
             {courseId ? 'Edit course' : 'Course Details'}
           </h2>
           <p className="mt-1 text-xs text-slate-500">
-            Set your course metadata before building modules.
+            Set your course metadata before building lessons.
           </p>
         </div>
         <div className="space-y-5 p-5 sm:p-6">
@@ -1009,19 +1043,66 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
               onChange={(e) => setCourseStartsAt(e.target.value)}
             />
             <p className="text-xs text-slate-500 mt-1">
-              Week 1 unlocks at this time; each higher week adds 7 days. Leave empty if you only use custom dates per module.
+              Week 1 unlocks at this time; each higher week adds 7 days. Leave empty if you only use custom dates per lesson.
             </p>
           </div>
-          <div>
+          <div className="group relative">
             <Label>Thumbnail image URL</Label>
+            {thumbnailUrl && (
+              <div className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 hidden w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-xl group-hover:block group-focus-within:block">
+                <img
+                  src={toRenderableImageUrl(thumbnailUrl)}
+                  alt="Course thumbnail preview"
+                  className="h-32 w-full rounded-lg object-cover"
+                />
+                <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                  Thumbnail preview
+                </p>
+              </div>
+            )}
             <FieldInput
               type="url"
               value={thumbnailUrl}
               onChange={(e) => setThumbnailUrl(e.target.value)}
               placeholder="https://…"
             />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                {thumbnailUploading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <Upload className="h-4 w-4" aria-hidden />
+                )}
+                {thumbnailUploading ? 'Uploading thumbnail...' : 'Upload thumbnail'}
+                <input
+                  type="file"
+                  className="sr-only"
+                  accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/svg+xml"
+                  disabled={thumbnailUploading}
+                  onChange={(e) => {
+                    const picked = e.target.files?.[0]
+                    e.target.value = ''
+                    if (!picked) return
+                    void uploadThumbnail(picked)
+                  }}
+                />
+              </label>
+              {thumbnailUrl && (
+                <a
+                  href={thumbnailUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-medium text-blue-600 hover:underline"
+                >
+                  Open uploaded thumbnail
+                </a>
+              )}
+            </div>
+            {thumbnailUploadError && (
+              <p className="mt-2 text-xs font-medium text-red-600">{thumbnailUploadError}</p>
+            )}
             <p className="text-xs text-slate-500 mt-1">
-              Paste a public image URL. File upload can be wired to storage later.
+              Paste a public URL, or upload an image to Google Drive to auto-fill this field. Hover this area to preview.
             </p>
           </div>
         </div>
@@ -1045,12 +1126,12 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white px-5 py-4 sm:px-6">
           <h2 className="text-lg font-semibold text-slate-900">Syllabus Builder</h2>
           <p className="mt-1 text-xs text-slate-500">
-            Add modules, reorder with drag-and-drop, then configure each module.
+            Add lessons, reorder with drag-and-drop, then configure each lesson.
           </p>
         </div>
         <div className="grid grid-cols-1 gap-6 p-5 sm:p-6 lg:grid-cols-5">
 
-          {/* Module List (left) */}
+          {/* Lesson List (left) */}
           <div className="space-y-2 lg:col-span-2">
             <DndContext
               sensors={sensors}
@@ -1117,7 +1198,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
               onClick={addModule}
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 py-2.5 text-sm font-medium text-slate-600 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600"
             >
-              <Plus className="w-4 h-4" /> Add Module
+              <Plus className="w-4 h-4" /> Add Lesson
             </button>
           </div>
 
@@ -1126,11 +1207,11 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
             {activeModule ? (
               <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-slate-800">Configure Module</h3>
+                  <h3 className="font-semibold text-slate-800">Configure Lesson</h3>
                   <button
                     onClick={() => removeModule(activeModule.id)}
                     className="text-red-400 hover:text-red-600 transition p-1 rounded"
-                    title="Delete module"
+                    title="Delete lesson"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -1138,7 +1219,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
 
                 {/* Type selector */}
                 <div>
-                  <Label>Module Type</Label>
+                  <Label>Lesson Type</Label>
                   <div className="flex flex-wrap gap-2">
                     {TYPE_OPTIONS.map((opt) => (
                       <button
@@ -1157,14 +1238,14 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
                   </div>
                 </div>
 
-                {/* Module Title */}
+                {/* Lesson Title */}
                 <div>
-                  <Label>Module Title</Label>
+                  <Label>Lesson Title</Label>
                   <FieldInput
                     type="text"
                     value={activeModule.title}
                     onChange={(e) => update({ title: e.target.value })}
-                    placeholder="Enter module title"
+                    placeholder="Enter lesson title"
                   />
                 </div>
 
@@ -1180,11 +1261,11 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
                       update({ week_index: v })
                     }}
                   />
-                  <p className="text-xs text-slate-500 mt-1">Modules with the same week appear under the same heading.</p>
+                  <p className="text-xs text-slate-500 mt-1">Lessons with the same week appear under the same heading.</p>
                 </div>
 
                 <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-                  <Label>When this module unlocks</Label>
+                  <Label>When this lesson unlocks</Label>
                   <div className="flex flex-col sm:flex-row gap-3">
                     <label className="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
                       <input
@@ -1209,7 +1290,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
                     <p className="text-xs text-slate-600">
                       {activeUnlockPreview ? (
                         <>
-                          Learners can open this module starting{' '}
+                          Learners can open this lesson starting{' '}
                           <strong>{new Date(activeUnlockPreview).toLocaleString()}</strong>.
                         </>
                       ) : (
@@ -1499,7 +1580,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
                   </div>
                 )}
 
-                {/* Feedback: instructions only; learners submit on the module page */}
+                {/* Feedback: instructions only; learners submit on the lesson page */}
                 {activeModule.type === 'feedback' && (
                   <div>
                     <Label>Instructions</Label>
@@ -1511,7 +1592,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
                       className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <p className="text-xs text-slate-500 mt-1">
-                      Learners type feedback on the module page; submitting marks the module complete.
+                      Learners type feedback on the lesson page; submitting marks the lesson complete.
                     </p>
                   </div>
                 )}
@@ -1557,7 +1638,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
               </div>
             ) : (
               <div className="flex h-full min-h-[180px] items-center justify-center rounded-xl border border-dashed border-slate-200 text-sm text-slate-400">
-                Select a module to configure it
+                Select a lesson to configure it
               </div>
             )}
           </div>
@@ -1591,7 +1672,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           <button
             type="button"
             onClick={() => handleSave(false)}
-            disabled={saving}
+            disabled={saving || thumbnailUploading}
             className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -1600,7 +1681,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           <button
             type="button"
             onClick={() => handleSave(true)}
-            disabled={saving}
+            disabled={saving || thumbnailUploading}
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow transition hover:bg-blue-700 disabled:opacity-50"
           >
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}

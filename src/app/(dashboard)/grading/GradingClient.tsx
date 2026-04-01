@@ -178,7 +178,7 @@ export default function GradingClient({
                   <thead>
                     <tr className="border-b border-slate-200 text-left text-slate-600">
                       <th className="p-3 font-medium">Learner</th>
-                      <th className="p-3 font-medium">Assignment</th>
+                      <th className="p-3 font-medium">Lesson</th>
                       <th className="p-3 font-medium">Type</th>
                       <th className="p-3 font-medium">Status</th>
                       <th className="p-3 font-medium">Files</th>

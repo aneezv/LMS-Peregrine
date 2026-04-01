@@ -86,11 +86,11 @@ export default async function CourseFeedbackPage({ params }: { params: Promise<{
 
       {feedbackModuleIds.length === 0 ? (
         <AppCard className="bg-amber-50 border-amber-200 p-6 text-amber-900 text-sm">
-          This course has no feedback modules yet. Add a <strong>Feedback</strong> module in the course builder.
+          This course has no feedback lessons yet. Add a <strong>Feedback</strong> lesson in the course builder.
         </AppCard>
       ) : (subs ?? []).length === 0 ? (
         <AppCard className="p-8 text-center text-slate-500">
-          No submissions yet for {feedbackModuleIds.length} feedback module
+          No submissions yet for {feedbackModuleIds.length} feedback lesson
           {feedbackModuleIds.length !== 1 ? 's' : ''}.
         </AppCard>
       ) : (
@@ -103,7 +103,7 @@ export default async function CourseFeedbackPage({ params }: { params: Promise<{
                 className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-2"
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
-                  <span className="font-medium text-slate-900">{mod?.title ?? 'Feedback module'}</span>
+                  <span className="font-medium text-slate-900">{mod?.title ?? 'Feedback lesson'}</span>
                   <span className="text-slate-500 text-xs">Week {mod?.week ?? '—'}</span>
                 </div>
                 <p className="text-xs text-slate-500">
@@ -121,7 +121,7 @@ export default async function CourseFeedbackPage({ params }: { params: Promise<{
                   href={`/courses/${courseId}/modules/${row.module_id}`}
                   className="text-xs font-medium text-rose-700 hover:underline"
                 >
-                  Open module →
+                  Open lesson →
                 </Link>
               </li>
             )

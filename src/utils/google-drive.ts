@@ -47,15 +47,16 @@ function loadServiceAccountCredentials(): Record<string, unknown> {
     }
   }
   throw new Error(
-    'Google Drive is not configured. Set GOOGLE_SERVICE_ACCOUNT_JSON, or GOOGLE_SERVICE_ACCOUNT_KEY_FILE (filename under credentials/), and GOOGLE_DRIVE_ASSIGNMENTS_FOLDER_ID.',
+    'Google Drive is not configured. Set GOOGLE_SERVICE_ACCOUNT_JSON, or GOOGLE_SERVICE_ACCOUNT_KEY_FILE (filename under credentials/).',
   )
 }
 
 /** Full Drive scope — needed for Shared drives (Team drives); service accounts have no “My Drive” quota. */
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive'
 
-const SHARED_DRIVE_HELP =
-  'Service accounts have no personal Drive storage. Use a Shared drive: create one in Google Drive, add your service account as a member (Content manager or Manager), create an "Assignments" folder inside that Shared drive, copy its folder ID into GOOGLE_DRIVE_ASSIGNMENTS_FOLDER_ID. See https://developers.google.com/drive/api/guides/about-shareddrives'
+function sharedDriveHelp(folderName: string, folderEnvVar: string): string {
+  return `Service accounts have no personal Drive storage. Use a Shared drive: create one in Google Drive, add your service account as a member (Content manager or Manager), create a "${folderName}" folder inside that Shared drive, copy its folder ID into ${folderEnvVar}. See https://developers.google.com/drive/api/guides/about-shareddrives`
+}
 
 function isStorageQuotaError(e: unknown): boolean {
   const s = JSON.stringify(e)
@@ -73,18 +74,16 @@ function isPermissionOrFolderError(e: unknown): boolean {
   )
 }
 
-/**
- * Uploads a file into a folder that must live on a **Shared drive** (Team drive).
- * My Drive folders will fail with a storage quota error for service accounts.
- */
-export async function uploadAssignmentToDrive(params: {
+async function uploadFileToDriveFolder(params: {
   buffer: Buffer
   fileName: string
   mimeType: string
+  folderIdEnvVar: 'GOOGLE_DRIVE_ASSIGNMENTS_FOLDER_ID' | 'GOOGLE_DRIVE_THUMBNAILS_FOLDER_ID'
+  folderNameForError: string
 }): Promise<{ fileId: string; webViewLink: string }> {
-  const folderId = process.env.GOOGLE_DRIVE_ASSIGNMENTS_FOLDER_ID
+  const folderId = process.env[params.folderIdEnvVar]
   if (!folderId?.trim()) {
-    throw new Error('GOOGLE_DRIVE_ASSIGNMENTS_FOLDER_ID is not set.')
+    throw new Error(`${params.folderIdEnvVar} is not set.`)
   }
 
   const credentials = loadServiceAccountCredentials()
@@ -131,15 +130,43 @@ export async function uploadAssignmentToDrive(params: {
     }
   } catch (e) {
     if (isStorageQuotaError(e)) {
-      throw new Error(SHARED_DRIVE_HELP)
+      throw new Error(sharedDriveHelp(params.folderNameForError, params.folderIdEnvVar))
     }
     if (isPermissionOrFolderError(e)) {
       throw new Error(
-        'Google Drive folder is not accessible by the service account. Verify GOOGLE_DRIVE_ASSIGNMENTS_FOLDER_ID points to a folder in a Shared drive, and add the service account as Content manager/Manager.',
+        `Google Drive folder is not accessible by the service account. Verify ${params.folderIdEnvVar} points to a folder in a Shared drive, and add the service account as Content manager/Manager.`,
       )
     }
     throw e
   }
+}
+
+/**
+ * Uploads a file into a folder that must live on a Shared drive (Team drive).
+ * My Drive folders will fail with a storage quota error for service accounts.
+ */
+export async function uploadAssignmentToDrive(params: {
+  buffer: Buffer
+  fileName: string
+  mimeType: string
+}): Promise<{ fileId: string; webViewLink: string }> {
+  return uploadFileToDriveFolder({
+    ...params,
+    folderIdEnvVar: 'GOOGLE_DRIVE_ASSIGNMENTS_FOLDER_ID',
+    folderNameForError: 'Assignments',
+  })
+}
+
+export async function uploadCourseThumbnailToDrive(params: {
+  buffer: Buffer
+  fileName: string
+  mimeType: string
+}): Promise<{ fileId: string; webViewLink: string }> {
+  return uploadFileToDriveFolder({
+    ...params,
+    folderIdEnvVar: 'GOOGLE_DRIVE_THUMBNAILS_FOLDER_ID',
+    folderNameForError: 'Thumbnails',
+  })
 }
 
 export async function deleteFileFromDrive(driveFileId: string): Promise<void> {

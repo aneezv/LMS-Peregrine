@@ -3,6 +3,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { BookOpen, Users } from 'lucide-react'
 import { EmptyState, PageHeader } from '@/components/ui/primitives'
+import { toRenderableImageUrl } from '@/lib/drive-image'
 
 export default async function CoursesPage() {
   const supabase = await createClient()
@@ -96,7 +97,7 @@ export default async function CoursesPage() {
               <div className="relative h-40 bg-gradient-to-br from-blue-100 to-indigo-200 flex items-center justify-center">
                 {course.thumbnail_url ? (
                   <Image
-                    src={course.thumbnail_url}
+                    src={toRenderableImageUrl(course.thumbnail_url)}
                     alt={course.title}
                     fill
                     className="object-cover"

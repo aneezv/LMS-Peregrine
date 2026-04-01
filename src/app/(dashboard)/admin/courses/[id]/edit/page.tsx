@@ -10,7 +10,7 @@ export default async function EditCoursePage({
 
   return (
     <div className="space-y-4 p-2">
-      <PageHeader title="Edit Course" description="Update title, syllabus, modules, and publish status." />
+      <PageHeader title="Edit Course" description="Update title, syllabus, lessons, and publish status." />
 
       <AppCard className="p-2">
         <CourseBuilder courseId={id} />

@@ -129,7 +129,7 @@ export default function ModuleSidebar({
       <nav
         id={navId}
         className="p-3 space-y-4"
-        aria-label="Course modules by week"
+        aria-label="Course lessons by week"
       >
         {isEnrolled && moduleUi && totalModules > 0 && (
           <div className="px-1">
@@ -193,8 +193,8 @@ export default function ModuleSidebar({
 
                       if (isLocked) {
                         const lockReason = !isEnrolled
-                          ? 'Enroll in the course to access this module'
-                          : 'This module is not yet available'
+                          ? 'Enroll in the course to access this lesson'
+                          : 'This lesson is not yet available'
                         return (
                           <li key={mod.id}>
                             <div
@@ -252,7 +252,7 @@ export default function ModuleSidebar({
                     })}
                   </ul>
                   {section.mods.length === 0 && (
-                    <p className="text-xs text-slate-400 pl-3 py-1 italic">No modules.</p>
+                    <p className="text-xs text-slate-400 pl-3 py-1 italic">No lessons.</p>
                   )}
                 </div>
               )}
@@ -269,7 +269,7 @@ export default function ModuleSidebar({
               Course completed
             </div>
             <p className="text-xs text-emerald-800 mt-1">
-              You’ve completed every module in this course.
+              You’ve completed every lesson in this course.
             </p>
           </div>
         </div>

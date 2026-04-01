@@ -192,12 +192,12 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
     mod.type !== 'live_session' &&
     mod.type !== 'offline_session'
   const nextDisabledReason = !nextModule
-    ? 'No next module in this course.'
+    ? 'No next lesson in this course.'
     : !currentModuleComplete
-      ? 'Complete this module first to unlock Next.'
+      ? 'Complete this lesson first to unlock Next.'
       : nextModule.locked
-        ? `Next module unlocks on ${nextModule.unlockAt ? new Date(nextModule.unlockAt).toLocaleString() : 'a scheduled date'}.`
-        : 'Next module unavailable.'
+        ? `Next lesson unlocks on ${nextModule.unlockAt ? new Date(nextModule.unlockAt).toLocaleString() : 'a scheduled date'}.`
+        : 'Next lesson unavailable.'
 
   // Time-lock check (learners only; staff can preview)
   if (
@@ -209,9 +209,9 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
     return (
       <div className="max-w-2xl mx-auto text-center py-20">
         <div className="text-6xl mb-4">🔒</div>
-        <h1 className="text-2xl font-bold text-slate-900 mb-2">Module Locked</h1>
+        <h1 className="text-2xl font-bold text-slate-900 mb-2">Lesson Locked</h1>
         <p className="text-slate-500">
-          This module unlocks on <strong>{unlockDate}</strong>.
+          This lesson unlocks on <strong>{unlockDate}</strong>.
         </p>
       </div>
     )
@@ -533,7 +533,7 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
               href={`/courses/${courseId}/modules/${nextModule!.id}`}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
             >
-              Next module
+              Next lesson
               <ArrowRight className="h-4 w-4" />
             </Link>
           ) : (
@@ -543,7 +543,7 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
               className="inline-flex cursor-not-allowed items-center gap-2 rounded-lg bg-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-600"
               title={nextDisabledReason}
             >
-              Next module
+              Next lesson
               <ArrowRight className="h-4 w-4" />
             </button>
           )}

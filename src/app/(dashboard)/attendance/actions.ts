@@ -26,7 +26,7 @@ export async function prepareSessionRoster(courseId: string, moduleId: string): 
     .eq('course_id', courseId)
     .single()
   if (!mod || (mod.type !== 'live_session' && mod.type !== 'offline_session')) {
-    return { error: 'Invalid session module' }
+    return { error: 'Invalid session lesson' }
   }
 
   const ensured = await ensureSessionRosterRows(supabase, moduleId, courseId)

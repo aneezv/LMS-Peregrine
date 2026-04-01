@@ -66,7 +66,7 @@ export async function PATCH(request: Request) {
     .single()
 
   if (mErr || !mod) {
-    return NextResponse.json({ error: 'Module not found' }, { status: 404 })
+    return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
   }
 
   const { data: course, error: cErr } = await db

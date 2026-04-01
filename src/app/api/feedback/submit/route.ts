@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     .single()
 
   if (modErr || !mod || mod.type !== 'feedback') {
-    return NextResponse.json({ error: 'Module not found or not feedback' }, { status: 404 })
+    return NextResponse.json({ error: 'Lesson not found or not feedback' }, { status: 404 })
   }
 
   const { data: enr } = await supabase

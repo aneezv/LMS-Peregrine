@@ -153,7 +153,7 @@ export default function EnrollmentsListClient({ items }: Props) {
                   <div className="flex items-center justify-between text-xs text-slate-600">
                     <span className="font-medium text-slate-700">Progress</span>
                     <span>
-                      {item.completedModules}/{item.totalModules} modules ({item.completionPct}%)
+                      {item.completedModules}/{item.totalModules} lessons ({item.completionPct}%)
                     </span>
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full border border-slate-200 bg-slate-100">
@@ -165,7 +165,7 @@ export default function EnrollmentsListClient({ items }: Props) {
                   </div>
                   <p className="text-xs text-slate-500">
                     Needed to complete: <span className="font-semibold text-slate-700">{item.remainingModules}</span>{' '}
-                    module{item.remainingModules === 1 ? '' : 's'}
+                    lesson{item.remainingModules === 1 ? '' : 's'}
                   </p>
                 </div>
               </div>

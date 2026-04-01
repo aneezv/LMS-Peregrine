@@ -18,6 +18,7 @@ export default async function DashboardPage() {
 
   const role = profile?.role ?? 'learner'
   const name = profile?.full_name ?? user.email?.split('@')[0] ?? 'there'
+  const isAdmin = role === 'admin'
   const isInstructor = role === 'instructor' || role === 'admin'
 
   // ── Learner data ─────────────────────────────────────────────
@@ -139,17 +140,34 @@ export default async function DashboardPage() {
     .eq('status', 'valid')
 
   // ── Instructor data ──────────────────────────────────────────
-  const { data: myCourses } = isInstructor
-    ? await supabase
-        .from('courses')
-        .select('id, course_code, title, status, created_at, enrollments(count)')
-        .eq('instructor_id', user.id)
-        .order('created_at', { ascending: false })
-    : { data: [] }
+  let myCourses:
+    | {
+        id: string
+        course_code: string
+        title: string
+        status: string
+        created_at: string
+        enrollments: { count: number }[]
+      }[]
+    | null = []
+
+  if (isInstructor) {
+    let staffCoursesQuery = supabase
+      .from('courses')
+      .select('id, course_code, title, status, created_at, enrollments(count)')
+      .order('created_at', { ascending: false })
+
+    if (!isAdmin) {
+      staffCoursesQuery = staffCoursesQuery.eq('instructor_id', user.id)
+    }
+
+    const { data } = await staffCoursesQuery
+    myCourses = data
+  }
 
   const metrics = [
     {
-      label: isInstructor ? 'My Courses' : 'Enrolled Courses',
+      label: isInstructor ? (isAdmin ? 'All Courses' : 'My Courses') : 'Enrolled Courses',
       value: isInstructor ? (myCourses?.length ?? 0) : enrolledCourses.length,
       icon: <BookOpen className="w-5 h-5 text-blue-500" />,
       bg: 'bg-blue-50',
@@ -197,18 +215,22 @@ export default async function DashboardPage() {
         ))}
       </div>
 
-      {/* Instructor: My Courses */}
+      {/* Staff: course list */}
       {isInstructor && (
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-            <h3 className="font-semibold text-slate-900">Your Courses</h3>
+            <h3 className="font-semibold text-slate-900">{isAdmin ? 'All Courses' : 'Your Courses'}</h3>
             <Link href="/courses" className="text-sm text-blue-600 hover:underline">View all</Link>
           </div>
           {!myCourses || myCourses.length === 0 ? (
             <div className="p-6">
               <EmptyState
                 title="No courses yet"
-                description="Create your first course to start teaching."
+                description={
+                  isAdmin
+                    ? 'No courses are available yet.'
+                    : 'Create your first course to start teaching.'
+                }
                 action={<Link href="/admin/courses/new" className="text-sm font-medium text-blue-600 hover:underline">Create your first course</Link>}
               />
             </div>

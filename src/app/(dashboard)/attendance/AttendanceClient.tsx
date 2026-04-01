@@ -77,13 +77,13 @@ export default function AttendanceClient({
           </select>
         </div>
         <span className="text-sm text-slate-500">
-          {filtered.length} session module{filtered.length === 1 ? '' : 's'}
+          {filtered.length} session lesson{filtered.length === 1 ? '' : 's'}
         </span>
       </div>
 
       {filtered.length === 0 ? (
         <div className="text-slate-500 text-sm py-12 text-center border border-dashed border-slate-200 rounded-xl">
-          No live or offline session modules in your courses yet.
+          No live or offline session lessons in your courses yet.
         </div>
       ) : (
         <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
@@ -91,7 +91,7 @@ export default function AttendanceClient({
             <thead>
               <tr className="bg-slate-100 border-b border-slate-200 text-left text-slate-600">
                 <th className="p-3 font-medium">Course</th>
-                <th className="p-3 font-medium">Module</th>
+                <th className="p-3 font-medium">Lesson</th>
                 <th className="p-3 font-medium">Type</th>
                 <th className="p-3 font-medium">Week</th>
                 <th className="p-3 font-medium">Attendance</th>

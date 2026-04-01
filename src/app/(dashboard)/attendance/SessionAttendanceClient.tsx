@@ -25,7 +25,7 @@ export default function SessionAttendanceClient({
   courseId: string
   currentUserId: string
   initialRows: RosterRow[]
-  /** hub: single attendance area; module: legacy link back to module */
+  /** hub: single attendance area; module: legacy link back to lesson */
   variant?: 'hub' | 'module'
   onAfterSubmit?: () => void
 }) {
@@ -149,7 +149,7 @@ export default function SessionAttendanceClient({
             href={`/courses/${courseId}/modules/${moduleId}`}
             className="text-sm text-slate-600 hover:text-blue-600 underline"
           >
-            ← Back to module
+            ← Back to lesson
           </Link>
         )}
       </div>
