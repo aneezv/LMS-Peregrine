@@ -31,12 +31,12 @@ export default async function DashboardLayout({
     { href: '/courses', label: isInstructor ? 'All Courses' : 'My Courses', icon: 'courses' as const },
     ...(isInstructor ? [{ href: '/grading', label: 'Grading', icon: 'grading' as const }] : []),
     ...(isInstructor ? [{ href: '/attendance', label: 'Attendance', icon: 'attendance' as const }] : []),
-    ...(isInstructor ? [{ href: '/attendance/bind-cards', label: 'Bind ID cards', icon: 'bindIdCards' as const }] : []),
     ...(isInstructor ? [{ href: '/attendance-report', label: 'Attendance Report', icon: 'attendanceReport' as const }] : []),
-    ...(isInstructor ? [{ href: '/admin/internship', label: 'Session Logs', icon: 'internship' as const }] : []),
+    ...(isInstructor ? [{ href: '/attendance/bind-cards', label: 'Bind ID cards', icon: 'bindIdCards' as const }] : []),
     ...(isInstructor ? [{ href: '/admin/courses/new', label: 'Create Course', icon: 'createCourse' as const }] : []),
-    ...(isAdmin ? [{ href: '/admin/users', label: 'Users', icon: 'users' as const }] : []),
+    ...(isInstructor ? [{ href: '/admin/internship', label: 'Session Logs', icon: 'internship' as const }] : []),
     ...(isAdmin ? [{ href: '/admin/offline-cards', label: 'Import ID cards', icon: 'importIdCards' as const }] : []),
+    // ...(isAdmin ? [{ href: '/admin/users', label: 'Users', icon: 'users' as const }] : []),
   ]
 
   return (

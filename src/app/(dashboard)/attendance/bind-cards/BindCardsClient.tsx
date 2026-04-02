@@ -404,8 +404,6 @@ export default function BindCardsClient({
         const resPreview = await lookupOfflineIdCard(normalizedCode)
         if (resPreview.ok) setPreviewLookup(resPreview)
         setBindActionMessage({ variant: 'success', text: 'Card unbound — you can assign it again.' })
-        setLearnerPick(null)
-        setLearnerQuery('')
         return
       }
       setBindActionMessage({ variant: 'error', text: res.message })
