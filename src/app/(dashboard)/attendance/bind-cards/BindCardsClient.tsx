@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import type { AttendanceCourseOption } from '../AttendanceClient'
-import { bindOfflineIdCard, lookupOfflineIdCard } from './actions'
+import { bindOfflineIdCard, lookupOfflineIdCard, unbindOfflineIdCard } from './actions'
 import {
   normalizeOfflinePublicCode,
   OFFLINE_ID_CODE_RE,
@@ -21,7 +21,13 @@ import {
 
 type LearnerOption = { id: string; full_name: string | null }
 
-export default function BindCardsClient({ courses }: { courses: AttendanceCourseOption[] }) {
+export default function BindCardsClient({
+  courses,
+  isAdmin,
+}: {
+  courses: AttendanceCourseOption[]
+  isAdmin: boolean
+}) {
   const readerDomId = useId().replace(/:/g, '')
   const [courseId, setCourseId] = useState('')
   const [learnerQuery, setLearnerQuery] = useState('')
@@ -54,6 +60,14 @@ export default function BindCardsClient({ courses }: { courses: AttendanceCourse
   }, [courses, courseId])
 
   const normalizedCode = useMemo(() => normalizeOfflinePublicCode(codeInput), [codeInput])
+
+  const boundLearnerLabel = useMemo(() => {
+    if (!previewLookup?.ok || previewLookup.status !== 'bound' || !previewLookup.learnerId) {
+      return null
+    }
+    const u = courseLearners.find((l) => l.id === previewLookup.learnerId)
+    return u?.full_name ?? u?.id ?? `Learner ${previewLookup.learnerId.slice(0, 8)}…`
+  }, [previewLookup, courseLearners])
 
   const refreshQueueUi = useCallback(async () => {
     const [p, f] = await Promise.all([listPendingBinds(), listRecentFailures(15)])
@@ -360,10 +374,69 @@ export default function BindCardsClient({ courses }: { courses: AttendanceCourse
     }
   }
 
+  async function runUnbind() {
+    setLookupErr(null)
+    setBindActionMessage(null)
+    if (!online) {
+      setBindActionMessage({
+        variant: 'error',
+        text: 'Unbind needs an internet connection.',
+      })
+      return
+    }
+    if (!courseId || !OFFLINE_ID_CODE_RE.test(normalizedCode)) {
+      setLookupErr('Choose a course and a valid card code, then preview.')
+      return
+    }
+    if (!previewLookup?.ok || previewLookup.status !== 'bound') {
+      setLookupErr('Preview shows this card is not bound.')
+      return
+    }
+    if (!isAdmin && previewLookup.courseId !== courseId) {
+      setLookupErr('Select the same course this card is bound to, then unbind.')
+      return
+    }
+    setBusy(true)
+    try {
+      const res = await unbindOfflineIdCard({ publicCode: normalizedCode, courseId })
+      if (res.ok) {
+        const resPreview = await lookupOfflineIdCard(normalizedCode)
+        if (resPreview.ok) setPreviewLookup(resPreview)
+        setBindActionMessage({ variant: 'success', text: 'Card unbound — you can assign it again.' })
+        setLearnerPick(null)
+        setLearnerQuery('')
+        return
+      }
+      setBindActionMessage({ variant: 'error', text: res.message })
+    } catch {
+      setBindActionMessage({
+        variant: 'error',
+        text: 'Unbind failed. Check your connection and try again.',
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const previewBlocking =
     previewLookup?.ok === true &&
     previewLookup.status === 'bound' &&
     previewLookup.learnerId !== learnerPick?.id
+
+  const canUnbind =
+    online &&
+    previewLookup?.ok === true &&
+    previewLookup.status === 'bound' &&
+    !!courseId &&
+    OFFLINE_ID_CODE_RE.test(normalizedCode) &&
+    (isAdmin || previewLookup.courseId === courseId)
+
+  const unbindCourseHint =
+    previewLookup?.ok &&
+    previewLookup.status === 'bound' &&
+    !isAdmin &&
+    previewLookup.courseId != null &&
+    previewLookup.courseId !== courseId
 
   return (
     <div className="space-y-8 max-w-2xl">
@@ -512,7 +585,7 @@ export default function BindCardsClient({ courses }: { courses: AttendanceCourse
       </section>
 
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-800">3. Confirm bind</h2>
+        <h2 className="text-sm font-semibold text-slate-800">3. Bind or unbind</h2>
         {previewLookup?.ok && (
           <div className="rounded-lg px-3 py-2 text-sm bg-slate-50 border border-slate-200 space-y-1">
             <p>
@@ -523,7 +596,7 @@ export default function BindCardsClient({ courses }: { courses: AttendanceCourse
               <span className="font-medium text-slate-700">Course:</span> {courseTitle || '—'}
             </p>
             <p>
-              <span className="font-medium text-slate-700">Learner:</span>{' '}
+              <span className="font-medium text-slate-700">Selected learner:</span>{' '}
               {learnerPick?.full_name ?? '—'}
             </p>
             <p>
@@ -531,9 +604,22 @@ export default function BindCardsClient({ courses }: { courses: AttendanceCourse
               {previewLookup.status === 'unbound' ? (
                 <span className="text-emerald-700">Unbound — ready to assign</span>
               ) : previewBlocking ? (
-                <span className="text-amber-800">Already bound to someone else</span>
+                <>
+                  <span className="text-amber-800">Bound to someone else</span>
+                  {boundLearnerLabel && (
+                    <span className="text-slate-600"> ({boundLearnerLabel})</span>
+                  )}
+                </>
+              ) : learnerPick &&
+                previewLookup.learnerId === learnerPick.id ? (
+                <span className="text-emerald-700">Already bound to selected learner</span>
               ) : (
-                <span className="text-emerald-700">Already bound to this learner</span>
+                <>
+                  <span className="text-emerald-700">Bound</span>
+                  {boundLearnerLabel && (
+                    <span className="text-slate-700"> — {boundLearnerLabel}</span>
+                  )}
+                </>
               )}
             </p>
           </div>
@@ -557,13 +643,30 @@ export default function BindCardsClient({ courses }: { courses: AttendanceCourse
           </div>
         )}
         {!online && (
-          <p className="text-xs text-amber-800">You are offline — Confirm bind will queue for sync.</p>
+          <p className="text-xs text-amber-800">
+            You are offline — Confirm bind will queue for sync. Unbind needs a connection.
+          </p>
+        )}
+        {unbindCourseHint && (
+          <p className="text-xs text-amber-800">
+            This card is tied to another course in the list — select that course to unbind, or ask an admin.
+          </p>
+        )}
+        {canUnbind && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void runUnbind()}
+            className="rounded-lg border border-red-300 bg-white text-red-800 px-4 py-2 text-sm font-medium hover:bg-red-50 disabled:opacity-50"
+          >
+            {busy ? 'Working…' : 'Unbind card (release)'}
+          </button>
         )}
         <button
           type="button"
           disabled={busy || !previewLookup?.ok || !learnerPick || !courseId || previewBlocking}
           onClick={() => void runBind()}
-          className="rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium disabled:opacity-50"
+          className="rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium disabled:opacity-50 block"
         >
           {busy ? 'Working…' : 'Confirm bind'}
         </button>

@@ -12,6 +12,7 @@ export type BindErrorCode =
   | 'NOT_ENROLLED'
   | 'CARD_NOT_FOUND'
   | 'ALREADY_BOUND'
+  | 'NOT_BOUND'
   | 'COURSE_MISMATCH'
   | 'DB_ERROR'
   | 'NOT_SIGNED_IN'

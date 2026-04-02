@@ -31,6 +31,7 @@ const NO_RETRY_CODES = new Set<string>([
   'NOT_ENROLLED',
   'CARD_NOT_FOUND',
   'ALREADY_BOUND',
+  'NOT_BOUND',
   'COURSE_MISMATCH',
 ])
 

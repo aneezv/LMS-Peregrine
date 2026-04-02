@@ -180,3 +180,78 @@ export async function bindOfflineIdCard(input: {
 
   return { ok: true }
 }
+
+/** Clear bind fields and release card (course_id cleared so it returns to the global pool). */
+export async function unbindOfflineIdCard(input: {
+  publicCode: string
+  courseId: string
+}): Promise<BindOfflineIdCardResult> {
+  const normalized = normalizeOfflinePublicCode(input.publicCode)
+  if (!OFFLINE_ID_CODE_RE.test(normalized)) {
+    return { ok: false, code: 'INVALID_CODE', message: 'Code must look like ID-ABC-XYZ.' }
+  }
+
+  const { supabase, user, error: accessErr } = await requireStaffAndCourseAccess(input.courseId)
+  if (!user || accessErr) {
+    const code = accessErr === 'NOT_SIGNED_IN' ? 'NOT_SIGNED_IN' : 'FORBIDDEN'
+    const message =
+      accessErr === 'NOT_SIGNED_IN' ? 'Not signed in.' : 'You do not have access to this course.'
+    return { ok: false, code, message }
+  }
+
+  const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  const isAdmin = prof?.role === 'admin'
+
+  const { data: card, error: cardErr } = await supabase
+    .from('offline_learner_id_cards')
+    .select('learner_id, course_id')
+    .eq('public_code', normalized)
+    .maybeSingle()
+
+  if (cardErr) {
+    return { ok: false, code: 'DB_ERROR', message: cardErr.message }
+  }
+  if (!card) {
+    return { ok: false, code: 'CARD_NOT_FOUND', message: 'No card found for this code.' }
+  }
+  if (!card.learner_id) {
+    return { ok: false, code: 'NOT_BOUND', message: 'This card is not bound.' }
+  }
+
+  const rowCourseId = card.course_id as string | null
+  if (!isAdmin) {
+    if (!rowCourseId || rowCourseId !== input.courseId) {
+      return {
+        ok: false,
+        code: 'COURSE_MISMATCH',
+        message: 'Select the course this card was bound under, then try again.',
+      }
+    }
+  }
+
+  const { data: updated, error: upErr } = await supabase
+    .from('offline_learner_id_cards')
+    .update({
+      learner_id: null,
+      bound_at: null,
+      bound_by: null,
+      course_id: null,
+    })
+    .eq('public_code', normalized)
+    .not('learner_id', 'is', null)
+    .select('id')
+    .maybeSingle()
+
+  if (upErr) {
+    return { ok: false, code: 'DB_ERROR', message: upErr.message }
+  }
+  if (!updated) {
+    return {
+      ok: false,
+      code: 'NOT_BOUND',
+      message: 'This card is no longer bound (refresh preview).',
+    }
+  }
+
+  return { ok: true }
+}

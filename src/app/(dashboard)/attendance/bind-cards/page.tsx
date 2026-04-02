@@ -30,7 +30,7 @@ export default async function BindOfflineIdCardsPage() {
         title="Bind ID cards"
         description="Assign printed offline cards to enrolled learners. Binds are queued when you are offline and sync when you reconnect."
       />
-      <BindCardsClient courses={courseList} />
+      <BindCardsClient courses={courseList} isAdmin={role === 'admin'} />
     </div>
   )
 }
