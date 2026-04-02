@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { PageHeader } from '@/components/ui/primitives'
+import { AppCard, PageHeader } from '@/components/ui/primitives'
 import BindCardsClient from './BindCardsClient'
 import type { AttendanceCourseOption } from '../AttendanceClient'
 
@@ -28,9 +28,11 @@ export default async function BindOfflineIdCardsPage() {
     <div className="space-y-6 p-2">
       <PageHeader
         title="Bind ID cards"
-        description="Assign printed offline cards to enrolled learners. Binds are queued when you are offline and sync when you reconnect."
+        description="Assign printed offline cards to enrolled learners."
       />
-      <BindCardsClient courses={courseList} isAdmin={role === 'admin'} />
+      <AppCard className="p-2">
+        <BindCardsClient courses={courseList} isAdmin={role === 'admin'} />
+      </AppCard>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { PageHeader } from '@/components/ui/primitives'
+import { AppCard, PageHeader } from '@/components/ui/primitives'
 import ImportOfflineCardsClient from './ImportOfflineCardsClient'
 
 export default async function AdminOfflineCardsImportPage() {
@@ -30,9 +30,11 @@ export default async function AdminOfflineCardsImportPage() {
     <div className="space-y-6 p-2">
       <PageHeader
         title="Import offline ID cards"
-        description="Upload a CSV (first column only), paste codes, or scan QR. Only administrators can add cards to the pool."
+        description="Upload a CSV, paste codes, or scan ID cards to add cards to the pool."
       />
-      <ImportOfflineCardsClient courses={courseList} />
+      <AppCard className="p-2">
+        <ImportOfflineCardsClient courses={courseList} />
+      </AppCard>
     </div>
   )
 }

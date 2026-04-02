@@ -18,6 +18,7 @@ import {
   type OfflineBindDeadLetter,
   type OfflineBindQueueItem,
 } from '@/lib/offline-bind-queue'
+import { Camera, Scan, Search, X, XCircle } from 'lucide-react'
 
 type LearnerOption = { id: string; full_name: string | null }
 
@@ -50,9 +51,8 @@ export default function BindCardsClient({
   const scannerRef = useRef<{ stop: () => Promise<void> } | null>(null)
   const [pending, setPending] = useState<OfflineBindQueueItem[]>([])
   const [failures, setFailures] = useState<OfflineBindDeadLetter[]>([])
-  const [online, setOnline] = useState(
-    typeof navigator !== 'undefined' ? navigator.onLine : true,
-  )
+  // Default true for SSR + first client paint so markup matches (avoids hydration mismatch).
+  const [online, setOnline] = useState(true)
 
   const courseTitle = useMemo(() => {
     const c = courses.find((x) => x.id === courseId)
@@ -80,6 +80,7 @@ export default function BindCardsClient({
   }, [refreshQueueUi])
 
   useEffect(() => {
+    setOnline(navigator.onLine)
     const on = () => setOnline(true)
     const off = () => setOnline(false)
     window.addEventListener('online', on)
@@ -439,7 +440,7 @@ export default function BindCardsClient({
     previewLookup.courseId !== courseId
 
   return (
-    <div className="space-y-8 max-w-2xl">
+    <div className="space-y-4">
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-800">1. Course and learner</h2>
         <div className="space-y-1">
@@ -479,7 +480,7 @@ export default function BindCardsClient({
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium text-slate-600">
-            Find learner (type name, min. 2 letters, then Search — no refetch)
+            Find learner by name
           </label>
           <div className="flex flex-wrap gap-2 items-center">
             <input
@@ -506,7 +507,7 @@ export default function BindCardsClient({
               onClick={() => runLearnerSearch()}
               className="rounded-lg bg-slate-800 text-white px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
-              Search
+              <Search className="w-4 h-4" />
             </button>
           </div>
           {learnerSearchNote && (
@@ -542,12 +543,9 @@ export default function BindCardsClient({
 
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-800">2. Card code</h2>
-        <p className="text-xs text-slate-500">
-          Camera needs a secure context (HTTPS or localhost). You can always type the code from the card.
-        </p>
         <div className="flex flex-wrap gap-2 items-end">
           <div className="flex-1 min-w-[180px] space-y-1">
-            <label className="text-xs font-medium text-slate-600">Public code</label>
+            <label className="text-xs font-medium text-slate-600">ID card code</label>
             <input
               value={codeInput}
               onChange={(e) => {
@@ -562,9 +560,9 @@ export default function BindCardsClient({
           <button
             type="button"
             onClick={() => (scanning ? void stopScanner() : void startScanner())}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+            className="rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50"
           >
-            {scanning ? 'Stop camera' : 'Scan QR'}
+            {scanning ? <XCircle className="w-4 h-4" /> : <Camera className="w-4 h-4" />}
           </button>
         </div>
         {scanning && (
@@ -580,7 +578,7 @@ export default function BindCardsClient({
           onClick={() => void runPreview()}
           className="rounded-lg bg-slate-800 text-white px-4 py-2 text-sm font-medium disabled:opacity-50"
         >
-          Preview card status
+          Preview ID card status
         </button>
       </section>
 
