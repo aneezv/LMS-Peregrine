@@ -16,6 +16,7 @@ import {
   PlusCircle,
   QrCode,
   UserCheck,
+  UserPlus,
   Sparkles,
   Users,
   X,
@@ -37,6 +38,7 @@ type NavItem = {
     | 'importIdCards'
     | 'sheetSync'
     | 'aiExternal'
+    | 'addInstructor'
 }
 
 const PEREGRINE_AI_HREF = 'https://ai.peregrinehub.com/'
@@ -57,6 +59,11 @@ export default function DashboardNavDrawer({
     role === 'admin'
       ? [
           ...links,
+          {
+            href: '/admin/add-instructor',
+            label: 'Add instructor',
+            icon: 'addInstructor' as const,
+          },
           {
             href: '/dashboard/admin/sheet-sync-log',
             label: 'Sheet sync log',
@@ -110,6 +117,8 @@ export default function DashboardNavDrawer({
         return <FileUp className="h-4 w-4" />
       case 'sheetSync':
         return <FileSpreadsheet className="h-4 w-4" />
+      case 'addInstructor':
+        return <UserPlus className="h-4 w-4" />
       case 'aiExternal':
         return <Sparkles className="h-4 w-4" />
       default:
