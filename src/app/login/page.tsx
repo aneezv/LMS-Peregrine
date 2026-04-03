@@ -50,7 +50,7 @@ export default async function LoginPage({
               {loginErrorMessage}
             </div>
           ) : null}
-          <div className="rounded-md shadow-sm space-y-2">
+          <div className="space-y-2">
             <div>
               <AppFieldLabel>Email address</AppFieldLabel>
               <input 
