@@ -5,6 +5,8 @@ import { useMemo, useState, useTransition } from 'react'
 import { prepareSessionRoster } from './actions'
 import SessionAttendanceClient, { type RosterRow } from './SessionAttendanceClient'
 import type { SessionModuleListItem } from './types'
+import { AppButton } from '@/components/ui/primitives'
+import { PencilIcon, XIcon } from 'lucide-react'
 
 export type AttendanceCourseOption = { id: string; title: string; course_code: string }
 
@@ -59,12 +61,6 @@ export default function AttendanceClient({
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-4">
-        <Link
-          href="/attendance/bind-cards"
-          className="text-sm font-medium text-blue-700 hover:text-blue-900 rounded-lg border border-blue-200 bg-blue-50/80 px-3 py-2"
-        >
-          Bind ID cards
-        </Link>
         <div className="flex flex-wrap items-center gap-2">
           <label className="text-sm font-medium text-slate-700">Course</label>
           <select
@@ -128,8 +124,9 @@ export default function AttendanceClient({
                       <button
                         type="button"
                         onClick={() => openModule(s)}
-                        className="text-blue-600 hover:text-blue-800 font-medium text-xs"
+                        className="border bg-amber-50 border-amber-200 rounded-lg inline-flex items-center gap-1 px-3 py-1.5 text-amber-700 hover:bg-amber-100 font-medium text-xs"
                       >
+                        <PencilIcon className="w-3.5 h-3.5 flex-shrink-0 mr-1" />
                         {selected?.moduleId === s.moduleId ? 'Reload' : 'Mark attendance'}
                       </button>
                     </td>
@@ -155,7 +152,7 @@ export default function AttendanceClient({
               onClick={closePanel}
               className="text-sm text-slate-600 hover:text-slate-900 px-3 py-1.5 rounded-lg border border-slate-200"
             >
-              Close
+              <XIcon className="w-3.5 h-3.5" />
             </button>
           </div>
 
