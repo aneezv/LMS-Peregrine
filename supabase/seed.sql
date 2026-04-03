@@ -1,12 +1,35 @@
 -- ============================================================
--- Peregrine T&C – sample data + optional test-account roles
+-- Peregrine T&C – seed data (local, staging, optional demo on production)
 --
--- Order: run supabase/schema.sql (or `supabase db reset`) first.
--- Requires at least one auth user so profiles exist (sign up once,
--- or add a user in Dashboard → Authentication → Users).
+-- Prerequisites
+--   • Apply all migrations OR load supabase/schema.sql on a greenfield DB.
+--   • Many inserts expect auth.users + profiles (trigger handle_new_user).
 --
--- Local CLI: migrations apply first; this file runs as [db.seed].
+-- Production (Supabase hosted)
+--   • Prefer: Dashboard → SQL → run Section 1 only, OR `supabase db push`
+--     then run chosen parts in SQL Editor.
+--   • Create your admin/instructor accounts in Authentication first.
+--   • Skip Section 2 (demo course) if you want an empty catalog, or run it
+--     on a staging project only.
+--   • sheet_sync_runs / sheet_sync_row_state: no rows required; API fills them.
+--
+-- Local: `supabase db reset` applies migrations + runs this entire file.
+--
 -- ============================================================
+
+-- ┌─────────────────────────────────────────────────────────────
+-- │ Section 1 — Always safe: mirror auth email onto profiles
+-- └─────────────────────────────────────────────────────────────
+update public.profiles p
+set email = u.email
+from auth.users u
+where u.id = p.id
+  and (p.email is null or p.email is distinct from u.email);
+
+-- ┌─────────────────────────────────────────────────────────────
+-- │ Section 2 — Demo catalog (skip on empty production DB)
+-- │ Promotes earliest auth user to instructor for sample course owner.
+-- └─────────────────────────────────────────────────────────────
 
 -- Promote the first signed-up user to instructor (sample course owner)
 UPDATE public.profiles
@@ -331,9 +354,11 @@ ORDER BY p.created_at ASC NULLS LAST
 LIMIT 1
 ON CONFLICT (course_id, learner_id) DO NOTHING;
 
--- ============================================================
--- Optional: named test accounts (create users in Dashboard first)
--- ============================================================
+-- ┌─────────────────────────────────────────────────────────────
+-- │ Section 3 — Optional named test accounts
+-- │ Create users in Dashboard (Authentication) with these emails first,
+-- │ or these UPDATEs are no-ops. Do NOT use weak passwords in production.
+-- └─────────────────────────────────────────────────────────────
 -- admin@peregrine.lms    / Admin1234!
 -- instructor@peregrine.lms / Instr1234!
 -- learner@peregrine.lms  / Learn1234!
@@ -410,7 +435,17 @@ ON CONFLICT (module_id, learner_id) DO UPDATE SET
   body = excluded.body,
   submitted_at = excluded.submitted_at;
 
--- Verbose check (safe to run in SQL Editor)
--- SELECT p.full_name, p.role, u.email
--- FROM public.profiles p
--- JOIN auth.users u ON u.id = p.id;
+-- ┌─────────────────────────────────────────────────────────────
+-- │ Section 4 — Production hand-off (run manually as needed)
+-- └─────────────────────────────────────────────────────────────
+-- After creating the first admin in Authentication (Dashboard):
+--   UPDATE public.profiles
+--   SET role = 'admin', full_name = 'Your Name'
+--   WHERE id = (SELECT id FROM auth.users WHERE email = 'you@yourdomain.com' LIMIT 1);
+--
+-- Sheet sync integration: env on app + migration for sheet_sync_* tables; no seed rows.
+--
+-- Verbose check (SQL Editor):
+--   SELECT p.full_name, p.role, u.email
+--   FROM public.profiles p
+--   JOIN auth.users u ON u.id = p.id;

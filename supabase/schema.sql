@@ -1,10 +1,10 @@
 -- ============================================================
 -- Peregrine T&C – Full database schema (baseline + migrations)
 -- Source of truth: mirrors supabase/migrations/*.sql through
--- 20260403120000_profiles_email.
+-- 20260403140000_sheet_sync_logs.sql
 -- Use: Supabase SQL Editor for a greenfield project, or compare
 -- against `supabase db dump` / migration history.
--- Then run supabase/seed.sql for sample rows (after auth users exist).
+-- Then run supabase/seed.sql (see that file for production vs demo usage).
 -- ============================================================
 
 -- Enable UUID extension
@@ -1540,6 +1540,53 @@ create policy "internship_daily_course learner read own"
 
 create policy "internship_daily_course admin read all"
   on public.internship_daily_activity_course
+  for select
+  to authenticated
+  using (public.is_admin());
+
+-- ──────────────────────────────────────────────
+-- SHEET SYNC LOGS (Google Sheet → LMS integration)
+-- Mirrors migration 20260403140000_sheet_sync_logs.sql
+-- ──────────────────────────────────────────────
+create table public.sheet_sync_runs (
+  id uuid primary key default gen_random_uuid(),
+  started_at timestamptz not null default now(),
+  finished_at timestamptz,
+  status text not null check (status in ('running', 'success', 'partial', 'failed')),
+  rows_total integer not null default 0,
+  rows_ok integer not null default 0,
+  rows_skipped integer not null default 0,
+  error_summary text,
+  details jsonb
+);
+
+create table public.sheet_sync_row_state (
+  id uuid primary key default gen_random_uuid(),
+  source_id text not null,
+  sheet_name text not null,
+  row_number integer not null,
+  payload_hash text not null,
+  last_outcome text not null check (last_outcome in ('synced', 'partial', 'error', 'skipped')),
+  last_error text,
+  updated_at timestamptz not null default now(),
+  last_run_id uuid references public.sheet_sync_runs (id) on delete set null,
+  unique (source_id, sheet_name, row_number)
+);
+
+create index sheet_sync_runs_started_at_idx on public.sheet_sync_runs (started_at desc);
+create index sheet_sync_row_state_lookup_idx on public.sheet_sync_row_state (source_id, sheet_name, row_number);
+
+alter table public.sheet_sync_runs enable row level security;
+alter table public.sheet_sync_row_state enable row level security;
+
+create policy "Admins read sheet sync runs"
+  on public.sheet_sync_runs
+  for select
+  to authenticated
+  using (public.is_admin());
+
+create policy "Admins read sheet sync row state"
+  on public.sheet_sync_row_state
   for select
   to authenticated
   using (public.is_admin());
