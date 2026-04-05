@@ -32,9 +32,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'moduleId required' }, { status: 400 })
   }
 
+  // quiz_time_limit_minutes: optional future server-side late-submit rejection; v1 timer is browser-only.
   const { data: mod, error: modErr } = await supabase
     .from('modules')
-    .select('id, type, course_id, quiz_passing_pct, quiz_allow_retest')
+    .select('id, type, course_id, quiz_passing_pct, quiz_allow_retest, quiz_time_limit_minutes')
     .eq('id', moduleId)
     .single()
 

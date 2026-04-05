@@ -41,6 +41,7 @@ import {
   unlockAtForWeek,
 } from '@/lib/unlock-schedule'
 import { syncQuizAndExternalForModule } from '@/lib/sync-module-quiz-external'
+import { parseQuizCsv } from '@/lib/parse-quiz-csv'
 import { toRenderableImageUrl } from '@/lib/drive-image'
 
 type ModuleType =
@@ -79,6 +80,10 @@ interface ModuleItem {
   quiz_passing_pct: number
   /** Instructor toggle: learners can retake this quiz */
   quiz_allow_retest: boolean
+  /** Minutes for learner timer (null = no limit); browser-enforced only */
+  quiz_time_limit_minutes: number | null
+  /** Shuffle question order per learner (deterministic on lesson page) */
+  quiz_randomize_questions: boolean
   external_links: { id: string; label: string; url: string }[]
   quiz_questions: {
     id: string
@@ -147,6 +152,17 @@ function buildModuleRow(
         ? Math.min(100, Math.max(0, Math.trunc(Number(mod.quiz_passing_pct)) || 60))
         : 60,
     quiz_allow_retest: mod.type === 'mcq' ? !!mod.quiz_allow_retest : true,
+    quiz_time_limit_minutes:
+      mod.type === 'mcq'
+        ? (() => {
+            const v = mod.quiz_time_limit_minutes
+            if (v == null) return null
+            const n = Math.trunc(Number(v))
+            if (!Number.isFinite(n) || n < 1) return null
+            return Math.min(1440, n) as number
+          })()
+        : null,
+    quiz_randomize_questions: mod.type === 'mcq' ? !!mod.quiz_randomize_questions : false,
     session_location:
       mod.type === 'offline_session' && mod.session_location.trim()
         ? mod.session_location.trim()
@@ -211,6 +227,8 @@ const makeModule = (weekIndex = 1): ModuleItem => ({
   assignment_description: '',
   quiz_passing_pct: 60,
   quiz_allow_retest: true,
+  quiz_time_limit_minutes: null,
+  quiz_randomize_questions: false,
   external_links: [{ id: newClientId(), label: '', url: '' }],
   quiz_questions: [],
 })
@@ -309,6 +327,12 @@ function mapDbModuleToItem(
 
   const qpct = (row.quiz_passing_pct as number | undefined) ?? 60
   const qRetest = (row.quiz_allow_retest as boolean | undefined) ?? true
+  const rawTlim = row.quiz_time_limit_minutes as number | null | undefined
+  const qTimeLim =
+    rawTlim != null && Number.isFinite(Number(rawTlim))
+      ? Math.min(1440, Math.max(1, Math.trunc(Number(rawTlim))))
+      : null
+  const qRand = !!(row.quiz_randomize_questions as boolean | undefined)
 
   return {
     id,
@@ -334,6 +358,8 @@ function mapDbModuleToItem(
     assignment_description: asn?.description ?? '',
     quiz_passing_pct: Math.min(100, Math.max(0, Math.trunc(qpct) || 60)),
     quiz_allow_retest: qRetest,
+    quiz_time_limit_minutes: qTimeLim,
+    quiz_randomize_questions: qRand,
     external_links,
     quiz_questions,
   }
@@ -442,7 +468,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           `
           id, type, title, week_index, description, content_url, session_location,
           available_from, session_start_at, session_end_at, sort_order, quiz_passing_pct,
-          quiz_allow_retest,
+          quiz_allow_retest, quiz_time_limit_minutes, quiz_randomize_questions,
           module_external_links ( label, url, sort_order ),
           quiz_questions ( id, prompt, sort_order, quiz_options ( id, label, is_correct, sort_order ) ),
           assignments ( id, description, max_score, passing_score, deadline_at )
@@ -691,6 +717,27 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         return { ...q, options: next }
       }),
     )
+  }
+
+  const [quizCsvPaste, setQuizCsvPaste] = useState('')
+  const [quizCsvWarnings, setQuizCsvWarnings] = useState<string[]>([])
+
+  function appendQuestionsFromCsv(text: string) {
+    const res = parseQuizCsv(text)
+    setQuizCsvWarnings(res.warnings)
+    if (res.questions.length === 0) return
+    patchActiveQuiz((qs) => [
+      ...qs,
+      ...res.questions.map((q) => ({
+        id: newClientId(),
+        prompt: q.prompt,
+        options: q.options.map((o) => ({
+          id: newClientId(),
+          label: o.label,
+          is_correct: o.is_correct,
+        })),
+      })),
+    ])
   }
 
   function patchExternalLinks(
@@ -1531,6 +1578,109 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
                           </span>
                         </span>
                       </label>
+                    </div>
+                    <div className="rounded-xl border border-cyan-100 bg-cyan-50/40 p-3 space-y-2">
+                      <p className="text-xs font-semibold text-cyan-900">Exam-style settings</p>
+                      <div>
+                        <Label>Time limit (minutes)</Label>
+                        <FieldInput
+                          type="number"
+                          min={1}
+                          max={1440}
+                          placeholder="e.g. 60 — leave empty for no limit"
+                          value={activeModule.quiz_time_limit_minutes ?? ''}
+                          onChange={(e) => {
+                            const v = e.target.value.trim()
+                            if (v === '') {
+                              update({ quiz_time_limit_minutes: null })
+                              return
+                            }
+                            const n = Math.trunc(Number(v))
+                            if (!Number.isFinite(n) || n < 1) {
+                              update({ quiz_time_limit_minutes: null })
+                              return
+                            }
+                            update({ quiz_time_limit_minutes: Math.min(1440, n) })
+                          }}
+                        />
+                        <p className="text-xs text-slate-500 mt-1">
+                          Shown as a countdown for learners (browser only; not enforced server-side in v1).
+                        </p>
+                      </div>
+                      <label className="flex items-start gap-2 text-sm text-slate-800">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={activeModule.quiz_randomize_questions}
+                          onChange={(e) => update({ quiz_randomize_questions: e.target.checked })}
+                        />
+                        <span>
+                          Randomize question order for each learner
+                          <span className="mt-0.5 block text-xs text-slate-500">
+                            Order is stable per learner but different from the list below—reduces simple
+                            answer-key sharing.
+                          </span>
+                        </span>
+                      </label>
+                      <p className="text-xs text-slate-600">
+                        <span className="font-medium text-slate-700">Recommended for exams:</span> set a time
+                        limit (e.g. 60 minutes) and enable randomization above.
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 space-y-2">
+                      <Label>Bulk import from CSV</Label>
+                      <p className="text-xs text-slate-600">
+                        Use a header row:{' '}
+                        <span className="font-mono text-[11px]">
+                          Question Text, Correct Answer, Option A, Option B, …
+                        </span>
+                        . Correct Answer can be a letter (A, B, …) or text matching an option.
+                      </p>
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50">
+                          <Upload className="w-4 h-4" />
+                          Choose .csv file
+                          <input
+                            type="file"
+                            accept=".csv,text/csv,text/plain"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0]
+                              e.target.value = ''
+                              if (!f) return
+                              const reader = new FileReader()
+                              reader.onload = () => {
+                                appendQuestionsFromCsv(String(reader.result ?? ''))
+                              }
+                              reader.readAsText(f)
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <textarea
+                        value={quizCsvPaste}
+                        onChange={(e) => setQuizCsvPaste(e.target.value)}
+                        rows={3}
+                        placeholder="Or paste CSV here (including header row)…"
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-mono text-slate-900"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          appendQuestionsFromCsv(quizCsvPaste)
+                          setQuizCsvPaste('')
+                        }}
+                        className="rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-900"
+                      >
+                        Append questions from paste
+                      </button>
+                      {quizCsvWarnings.length > 0 && (
+                        <ul className="list-disc pl-5 text-xs text-amber-800 space-y-0.5">
+                          {quizCsvWarnings.map((w, i) => (
+                            <li key={i}>{w}</li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                     <div className="space-y-3">
                       <div className="flex items-center justify-between gap-2">

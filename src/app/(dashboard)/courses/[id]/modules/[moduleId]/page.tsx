@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import AssignmentUpload from '@/components/AssignmentUpload'
 import QuizTakeClient, { type QuizQuestionPublic, type QuizResult } from '@/components/QuizTakeClient'
+import { shuffleDeterministic } from '@/lib/shuffle-deterministic'
 import FeedbackSubmitClient from '@/components/FeedbackSubmitClient'
 import ExternalResourceLinks from '@/components/ExternalResourceLinks'
 import { ArrowRight, CalendarDays, CheckCircle2, Clock3, MapPin } from 'lucide-react'
@@ -48,6 +49,7 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
       `
       id, title, type, week_index, description, content_url, session_location, available_from,
       session_start_at, session_end_at, quiz_passing_pct, quiz_allow_retest,
+      quiz_time_limit_minutes, quiz_randomize_questions,
       module_external_links ( id, label, url, sort_order ),
       quiz_questions ( id, prompt, sort_order, quiz_options ( id, label, is_correct, sort_order ) ),
       assignments(id, description, max_score, passing_score, deadline_at, allow_late)
@@ -82,11 +84,29 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
     options: sortNested(q.quiz_options),
   }))
 
-  const quizForLearner: QuizQuestionPublic[] = quizQuestionsSorted.map((q) => ({
+  let quizForLearner: QuizQuestionPublic[] = quizQuestionsSorted.map((q) => ({
     id: q.id,
     prompt: q.prompt,
     options: q.options.map((o) => ({ id: o.id, label: o.label })),
   }))
+
+  const randomizeQuiz =
+    mod.type === 'mcq' &&
+    !!enrollment &&
+    !!(mod.quiz_randomize_questions as boolean | null | undefined)
+
+  if (randomizeQuiz && quizForLearner.length > 1) {
+    quizForLearner = shuffleDeterministic(quizForLearner, `${moduleId}:${user.id}`)
+  }
+
+  const rawQuizTlim = mod.quiz_time_limit_minutes
+  const quizTimeLimitResolved =
+    mod.type === 'mcq' &&
+    rawQuizTlim != null &&
+    Number.isFinite(Number(rawQuizTlim)) &&
+    Math.trunc(Number(rawQuizTlim)) >= 1
+      ? Math.min(1440, Math.trunc(Number(rawQuizTlim)))
+      : null
 
   let quizInitialResult: QuizResult | null = null
   let feedbackSubmitted = false
@@ -477,6 +497,8 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
               initialResult={quizInitialResult}
               allowRetest={(mod.quiz_allow_retest as boolean | null) ?? true}
               introText={mod.description ?? undefined}
+              timeLimitMinutes={quizTimeLimitResolved}
+              questionsRandomized={randomizeQuiz}
             />
           ) : null}
         </div>

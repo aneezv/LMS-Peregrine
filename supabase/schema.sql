@@ -116,6 +116,13 @@ create table public.modules (
   quiz_passing_pct smallint not null default 60
     check (quiz_passing_pct >= 0 and quiz_passing_pct <= 100),
   quiz_allow_retest boolean not null default true,
+  quiz_time_limit_minutes smallint
+    null
+    check (
+      quiz_time_limit_minutes is null
+      or (quiz_time_limit_minutes >= 1 and quiz_time_limit_minutes <= 1440)
+    ),
+  quiz_randomize_questions boolean not null default false,
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
 );
