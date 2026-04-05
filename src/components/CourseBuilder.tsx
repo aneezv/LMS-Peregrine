@@ -31,6 +31,8 @@ import {
   CheckCircle2,
   Trash2,
   Upload,
+  Copy,
+  ClipboardPaste,
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -232,6 +234,101 @@ const makeModule = (weekIndex = 1): ModuleItem => ({
   external_links: [{ id: newClientId(), label: '', url: '' }],
   quiz_questions: [],
 })
+
+const MODULE_CLIPBOARD_PREFIX = 'peregrine:coursebuilder:module:v1:'
+
+function remapModuleIds(mod: ModuleItem): ModuleItem {
+  return {
+    ...mod,
+    id: newClientId(),
+    dbId: null,
+    external_links: (mod.external_links ?? []).map((l) => ({
+      ...l,
+      id: newClientId(),
+    })),
+    quiz_questions: (mod.quiz_questions ?? []).map((q) => ({
+      ...q,
+      id: newClientId(),
+      options: (q.options ?? []).map((o) => ({
+        ...o,
+        id: newClientId(),
+      })),
+    })),
+  }
+}
+
+function serializeModuleForClipboard(mod: ModuleItem): string {
+  return MODULE_CLIPBOARD_PREFIX + JSON.stringify(mod)
+}
+
+function parseModuleFromClipboard(text: string): ModuleItem | null {
+  if (!text.startsWith(MODULE_CLIPBOARD_PREFIX)) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text.slice(MODULE_CLIPBOARD_PREFIX.length))
+  } catch {
+    return null
+  }
+  if (!parsed || typeof parsed !== 'object') return null
+  const p = parsed as Partial<ModuleItem>
+  const base = makeModule(1)
+  const merged: ModuleItem = {
+    ...base,
+    ...p,
+    id: typeof p.id === 'string' ? p.id : base.id,
+    dbId: null,
+    week_index: Math.max(1, Math.trunc(Number(p.week_index)) || 1),
+    type: normalizeModuleType(String(p.type ?? base.type)),
+    unlock_mode: p.unlock_mode === 'manual' ? 'manual' : 'auto',
+    available_from: typeof p.available_from === 'string' ? p.available_from : base.available_from,
+    description: typeof p.description === 'string' ? p.description : base.description,
+    content_url: typeof p.content_url === 'string' ? p.content_url : base.content_url,
+    session_location:
+      typeof p.session_location === 'string' ? p.session_location : base.session_location,
+    session_start_at:
+      typeof p.session_start_at === 'string' ? p.session_start_at : base.session_start_at,
+    session_end_at: typeof p.session_end_at === 'string' ? p.session_end_at : base.session_end_at,
+    max_score: typeof p.max_score === 'number' ? p.max_score : base.max_score,
+    passing_score: typeof p.passing_score === 'number' ? p.passing_score : base.passing_score,
+    deadline_at: typeof p.deadline_at === 'string' ? p.deadline_at : base.deadline_at,
+    assignment_description:
+      typeof p.assignment_description === 'string'
+        ? p.assignment_description
+        : base.assignment_description,
+    quiz_passing_pct:
+      typeof p.quiz_passing_pct === 'number' ? p.quiz_passing_pct : base.quiz_passing_pct,
+    quiz_allow_retest: p.quiz_allow_retest !== false,
+    quiz_time_limit_minutes:
+      p.quiz_time_limit_minutes === null || typeof p.quiz_time_limit_minutes === 'number'
+        ? p.quiz_time_limit_minutes
+        : base.quiz_time_limit_minutes,
+    quiz_randomize_questions: Boolean(p.quiz_randomize_questions),
+    external_links: Array.isArray(p.external_links)
+      ? p.external_links.map((l) => ({
+          id: typeof l.id === 'string' ? l.id : newClientId(),
+          label: typeof l.label === 'string' ? l.label : '',
+          url: typeof l.url === 'string' ? l.url : '',
+        }))
+      : base.external_links,
+    quiz_questions: Array.isArray(p.quiz_questions)
+      ? p.quiz_questions.map((q) => ({
+          id: typeof q.id === 'string' ? q.id : newClientId(),
+          prompt: typeof q.prompt === 'string' ? q.prompt : '',
+          options: Array.isArray(q.options)
+            ? q.options.map((o) => ({
+                id: typeof o.id === 'string' ? o.id : newClientId(),
+                label: typeof o.label === 'string' ? o.label : '',
+                is_correct: Boolean(o.is_correct),
+              }))
+            : [],
+        }))
+      : base.quiz_questions,
+  }
+  if (merged.external_links.length === 0) {
+    merged.external_links = [{ id: newClientId(), label: '', url: '' }]
+  }
+  return merged
+}
 
 const TYPE_OPTIONS: { value: ModuleType; label: string; icon: React.ReactNode }[] = [
   { value: 'video', label: 'Video', icon: <Video className="w-4 h-4" /> },
@@ -639,6 +736,41 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
 
   const removeModule = (id: string) => {
     setModules((prev) => prev.filter((m) => m.id !== id))
+  }
+
+  const copyModuleToClipboard = async (mod: ModuleItem, e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(serializeModuleForClipboard(mod))
+      setActionError('')
+    } catch {
+      setActionError('Could not copy lesson to clipboard.')
+    }
+  }
+
+  const pasteModuleFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText()
+      const parsed = parseModuleFromClipboard(text)
+      if (!parsed) {
+        setActionError('Clipboard does not contain a copied lesson.')
+        return
+      }
+      const fresh = remapModuleIds(parsed)
+      const activeIdx = modules.findIndex((m) => m.id === activeId)
+      const insertAt = activeIdx >= 0 ? activeIdx + 1 : modules.length
+      const week = activeModule?.week_index ?? fresh.week_index
+      const withWeek: ModuleItem = { ...fresh, week_index: week }
+      setModules((prev) => {
+        const next = [...prev]
+        next.splice(insertAt, 0, withWeek)
+        return next
+      })
+      setActiveId(withWeek.id)
+      setActionError('')
+    } catch {
+      setActionError('Could not read clipboard or paste lesson.')
+    }
   }
 
   const update = (patch: Partial<ModuleItem>) => {
@@ -1245,7 +1377,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
                                 : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
                             }`}
                           >
-                            <div className="flex items-center gap-2">
+                            <div className="flex min-w-0 items-center gap-2">
                               <span
                                 className="flex-shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500"
                                 title={`Week ${mod.week_index}`}
@@ -1261,9 +1393,17 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
                                 {mod.type === 'feedback' && <MessageSquare className="w-4 h-4" />}
                                 {mod.type === 'external_resource' && <ExternalLink className="w-4 h-4" />}
                               </span>
-                              <span className="truncate text-sm font-medium text-slate-800">
+                              <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
                                 {mod.title}
                               </span>
+                              <button
+                                type="button"
+                                onClick={(e) => copyModuleToClipboard(mod, e)}
+                                className="ml-auto flex-shrink-0 rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                                title="Copy lesson"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </button>
                             </div>
                           </div>
                         </SortableItem>
@@ -1286,15 +1426,26 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           <div className="lg:col-span-3">
             {activeModule ? (
               <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <h3 className="font-semibold text-slate-800">Configure Lesson</h3>
-                  <button
-                    onClick={() => removeModule(activeModule.id)}
-                    className="text-red-400 hover:text-red-600 transition p-1 rounded"
-                    title="Delete lesson"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => void pasteModuleFromClipboard()}
+                      className="rounded p-1 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
+                      title="Paste copied lesson after this one"
+                    >
+                      <ClipboardPaste className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeModule(activeModule.id)}
+                      className="rounded p-1 text-red-400 transition hover:bg-red-50 hover:text-red-600"
+                      title="Delete lesson"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Type selector */}
