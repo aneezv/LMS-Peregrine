@@ -81,8 +81,12 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
 
   const graded = !!submission?.gradedAt
   const turnedIn = !!submission?.isTurnedIn
-  const canEdit = !graded && !turnedIn
-  const canUnsubmit = !graded && turnedIn
+
+  const isPassed = submission?.isPassed ?? false;
+  const isLocked = graded && isPassed;
+
+  const canEdit = !isLocked && !turnedIn;
+  const canUnsubmit = !isLocked && turnedIn;
   const statusLabel = graded ? 'Graded' : turnedIn ? 'Turned in' : 'Draft'
 
   /** Pass a snapshot `Array.from(input.files)` so the list survives input reset after await. */
@@ -234,18 +238,18 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
 
       {errorMsg && (
         <div className="flex items-center gap-3 text-red-700 bg-red-50 border border-red-200 rounded-lg p-4">
-          <AlertCircle className="h-5 w-5 flex-shrink-0" />
+          <AlertCircle className="h-5 w-5 shrink-0" />
           <p className="text-sm">{errorMsg}</p>
         </div>
       )}
 
       {graded && submission && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-2">
-          <div className="flex items-center gap-2 text-emerald-800 font-semibold">
+        <div className={`rounded-xl border ${submission.isPassed ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-100'} p-4 space-y-2`}>
+          <div className={`flex items-center gap-2 ${submission.isPassed ? 'text-emerald-800' : 'text-red-800'} font-semibold`}>
             <CheckCircle2 className="h-5 w-5" />
             Graded
           </div>
-          <p className="text-sm text-emerald-900">
+          <p className={`text-sm ${submission.isPassed ? 'text-emerald-900' : 'text-red-900'}`}>
             Score:{' '}
             <strong>
               {submission.score ?? '—'}
@@ -258,7 +262,7 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
             )}
           </p>
           {submission.feedback && (
-            <p className="text-sm text-emerald-900 whitespace-pre-wrap">
+            <p className="text-sm text-slate-900 whitespace-pre-wrap">
               <span className="font-medium">Feedback:</span> {submission.feedback}
             </p>
           )}
@@ -277,7 +281,7 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
                 className="border border-slate-200 rounded-xl p-3 flex items-center justify-between bg-white shadow-sm gap-3"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="p-2 bg-blue-50 text-blue-600 rounded-lg flex-shrink-0">
+                  <div className="p-2 bg-blue-50 text-blue-600 rounded-lg shrink-0">
                     <FileText className="w-5 h-5" />
                   </div>
                   <div className="min-w-0">
@@ -297,7 +301,7 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
                     type="button"
                     onClick={() => void removeFile(f.id)}
                     disabled={actionLoading || uploading}
-                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition flex-shrink-0"
+                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition shrink-0"
                     title="Remove"
                   >
                     <Trash2 className="w-5 h-5" />
@@ -336,7 +340,7 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
         </label>
       )}
 
-      {!graded && (
+      {!isLocked && (
         <div className="flex flex-col sm:flex-row gap-3 pt-2">
           {canEdit && (
             <button

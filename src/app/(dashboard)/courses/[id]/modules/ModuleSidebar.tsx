@@ -16,6 +16,7 @@ import {
   ListChecks,
   MessageSquare,
   ExternalLink,
+  CircleAlert,
 } from 'lucide-react'
 import type { ModuleUiStatus } from '@/lib/learner-module-status'
 
@@ -255,6 +256,9 @@ export default function ModuleSidebar({
                                 </span>
                               )
                             }
+                            {ui?.isFailed && (
+                            <CircleAlert className="w-4 h-4 text-amber-500 shrink-0" aria-label="Not passed" />
+                            )}
                           </Link>
                         </li>
                       )

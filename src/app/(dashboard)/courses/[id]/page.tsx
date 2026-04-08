@@ -13,6 +13,7 @@ import {
   MessageSquare,
   ExternalLink,
   Info,
+  CircleAlert,
 } from 'lucide-react'
 import Link from 'next/link'
 import EnrollButton from '@/components/EnrollButton'
@@ -368,6 +369,9 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
                             <span className="text-xs font-medium text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded shrink-0" title="In grading">
                               In grading
                             </span>
+                          )}
+                          {ui?.isFailed && (
+                            <CircleAlert className="w-4 h-4 text-amber-500 shrink-0" aria-label="Not passed" />
                           )}
                           <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 shrink-0" />
                         </Link>

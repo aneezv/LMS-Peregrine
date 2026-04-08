@@ -31,7 +31,7 @@ export async function POST(request: Request) {
 
   const { data: sub, error: sErr } = await db
     .from('submissions')
-    .select('id, graded_at, file_url, is_turned_in')
+    .select('id, graded_at, file_url, is_turned_in, is_passed')
     .eq('assignment_id', assignmentId)
     .eq('learner_id', user.id)
     .maybeSingle()
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Add at least one file before turning in.' }, { status: 400 })
   }
 
-  if (sub.graded_at) {
+  if (sub.graded_at && sub.is_passed) {
     return NextResponse.json({ error: 'Already graded.' }, { status: 400 })
   }
 

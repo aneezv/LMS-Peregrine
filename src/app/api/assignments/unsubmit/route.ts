@@ -31,7 +31,7 @@ export async function POST(request: Request) {
 
   const { data: sub, error: sErr } = await db
     .from('submissions')
-    .select('id, graded_at, is_turned_in')
+    .select('id, graded_at, is_turned_in, is_passed')
     .eq('assignment_id', assignmentId)
     .eq('learner_id', user.id)
     .maybeSingle()
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Nothing to unsubmit.' }, { status: 400 })
   }
 
-  if (sub.graded_at) {
+  if (sub.graded_at && sub.is_passed) {
     return NextResponse.json({ error: 'Graded work cannot be unsubmitted.' }, { status: 400 })
   }
 
@@ -58,6 +58,9 @@ export async function POST(request: Request) {
     .update({
       is_turned_in: false,
       turned_in_at: null,
+      is_passed: null,
+      graded_at: null,
+
     })
     .eq('id', sub.id)
 

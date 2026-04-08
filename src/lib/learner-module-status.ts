@@ -4,6 +4,7 @@ export type ModuleUiStatus = {
   complete: boolean;
   overdue: boolean;
   in_grading?: boolean; // for assignments: submitted but not graded yet
+  isFailed?: boolean; // for assignments: graded but not passed
 }
 
 type Mod = { id: string; type: string | null }
@@ -90,12 +91,12 @@ export async function getLearnerModuleStatusMap(
     }
   }
 
-  const submissionByAssignment = new Map<string, { graded_at: string | null, submitted_at: string | null , is_turned_in: boolean }>()
+  const submissionByAssignment = new Map<string, { graded_at: string | null, submitted_at: string | null , is_turned_in: boolean , is_passed: boolean }>()
   const assignmentIds = [...new Set([...assignIdByModule.values()])]
   if (assignmentIds.length > 0) {
     const { data: subs } = await supabase
       .from('submissions')
-      .select('assignment_id, graded_at, submitted_at, is_turned_in')
+      .select('assignment_id, graded_at, submitted_at, is_turned_in, is_passed')
       .eq('learner_id', learnerId)
       .in('assignment_id', assignmentIds)
 
@@ -103,7 +104,8 @@ export async function getLearnerModuleStatusMap(
       submissionByAssignment.set(s.assignment_id as string, { 
         graded_at: (s.graded_at as string | null) ?? null,
         submitted_at: (s.submitted_at as string | null) ?? null,
-        is_turned_in: !!(s as { is_turned_in?: boolean }).is_turned_in
+        is_turned_in: !!(s as { is_turned_in?: boolean }).is_turned_in,
+        is_passed: !!(s as { is_passed?: boolean }).is_passed
       })
     }
   }
@@ -132,13 +134,15 @@ export async function getLearnerModuleStatusMap(
       const aid = assignIdByModule.get(pid)
       const sub = aid ? submissionByAssignment.get(aid) : undefined
       const graded = !!sub?.graded_at
-      const complete = progDone || graded
+      const is_passed = !!sub?.is_passed
+      const complete = graded && is_passed
+      const isFailed = graded && !is_passed
       const deadline = deadlineByModule.get(pid) ?? null
       const submitted = !!sub?.submitted_at;
       const is_turned_in = !!sub?.is_turned_in
       const in_grading = submitted && !graded && is_turned_in;
       const overdue = !!deadline && !complete && !submitted && new Date(deadline).getTime() < now
-      out[pid] = { complete, overdue, in_grading }
+      out[pid] = { complete, overdue, in_grading , isFailed }
       continue
     }
 
