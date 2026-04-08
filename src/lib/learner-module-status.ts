@@ -136,7 +136,7 @@ export async function getLearnerModuleStatusMap(
       const deadline = deadlineByModule.get(pid) ?? null
       const submitted = !!sub?.submitted_at;
       const is_turned_in = !!sub?.is_turned_in
-      const in_grading = submitted && !graded && !is_turned_in;
+      const in_grading = submitted && !graded && is_turned_in;
       const overdue = !!deadline && !complete && !submitted && new Date(deadline).getTime() < now
       out[pid] = { complete, overdue, in_grading }
       continue
