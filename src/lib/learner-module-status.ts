@@ -90,19 +90,20 @@ export async function getLearnerModuleStatusMap(
     }
   }
 
-  const submissionByAssignment = new Map<string, { graded_at: string | null, submitted_at: string | null }>()
+  const submissionByAssignment = new Map<string, { graded_at: string | null, submitted_at: string | null , is_turned_in: boolean }>()
   const assignmentIds = [...new Set([...assignIdByModule.values()])]
   if (assignmentIds.length > 0) {
     const { data: subs } = await supabase
       .from('submissions')
-      .select('assignment_id, graded_at, submitted_at')
+      .select('assignment_id, graded_at, submitted_at, is_turned_in')
       .eq('learner_id', learnerId)
       .in('assignment_id', assignmentIds)
 
     for (const s of subs ?? []) {
       submissionByAssignment.set(s.assignment_id as string, { 
         graded_at: (s.graded_at as string | null) ?? null,
-        submitted_at: (s.submitted_at as string | null) ?? null
+        submitted_at: (s.submitted_at as string | null) ?? null,
+        is_turned_in: !!(s as { is_turned_in?: boolean }).is_turned_in
       })
     }
   }
@@ -134,7 +135,8 @@ export async function getLearnerModuleStatusMap(
       const complete = progDone || graded
       const deadline = deadlineByModule.get(pid) ?? null
       const submitted = !!sub?.submitted_at;
-      const in_grading = submitted && !graded;
+      const is_turned_in = !!sub?.is_turned_in
+      const in_grading = submitted && !graded && !is_turned_in;
       const overdue = !!deadline && !complete && !submitted && new Date(deadline).getTime() < now
       out[pid] = { complete, overdue, in_grading }
       continue
