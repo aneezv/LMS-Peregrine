@@ -111,7 +111,7 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
       }
       const mime = file.type
       if (!isAllowedAssignmentMime(mime, file.name)) {
-        setErrorMsg(`"${file.name}" is not an allowed type (PDF, Word, or images).`)
+        setErrorMsg(`"${file.name}" is not an allowed type (PDF, Word, Excel, CSV, or images).`)
         return
       }
     }
@@ -322,15 +322,14 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
           )}
           <p className="text-slate-600 font-medium text-sm text-center">Add files</p>
           <p className="text-slate-400 text-xs mt-1 text-center">
-            PDF, Word, images · Up to {MAX_FILES_PER_SUBMISSION} files ·{' '}
+            PDF, Word, Excel, CSV, images · Up to {MAX_FILES_PER_SUBMISSION} files ·{' '}
             {Math.floor(MAX_FILE_BYTES / (1024 * 1024))} MB each
           </p>
           <input
             type="file"
             multiple
             className="sr-only"
-            accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.webp,application/pdf,image/*"
-            disabled={uploading || files.length >= MAX_FILES_PER_SUBMISSION}
+            accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.webp,.csv,.xlsx,.xls,application/pdf,image/*,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"            disabled={uploading || files.length >= MAX_FILES_PER_SUBMISSION}
             onChange={(e) => {
               const snapshot = e.target.files ? Array.from(e.target.files) : []
               e.target.value = ''

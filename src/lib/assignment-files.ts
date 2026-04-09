@@ -11,6 +11,11 @@ const ALLOWED = new Set([
   'image/webp',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/msword',
+  // Spreadsheets
+  'text/csv',
+  'application/csv',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.ms-excel', // .xls
 ])
 
 export function isAllowedAssignmentMime(mime: string, fileName: string): boolean {
@@ -24,7 +29,10 @@ export function isAllowedAssignmentMime(mime: string, fileName: string): boolean
     lower.endsWith('.gif') ||
     lower.endsWith('.webp') ||
     lower.endsWith('.docx') ||
-    lower.endsWith('.doc')
+    lower.endsWith('.doc') ||
+    lower.endsWith('.csv') ||
+    lower.endsWith('.xlsx') ||
+    lower.endsWith('.xls')
   )
 }
 
@@ -39,5 +47,10 @@ export function guessMime(fileName: string): string {
     return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   }
   if (lower.endsWith('.doc')) return 'application/msword'
+  if (lower.endsWith('.csv')) return 'text/csv'
+  if (lower.endsWith('.xlsx')) {
+    return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  }
+  if (lower.endsWith('.xls')) return 'application/vnd.ms-excel'
   return 'application/octet-stream'
 }
