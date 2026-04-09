@@ -52,7 +52,6 @@ export default function GradingClient({
   const grouped = useMemo(() => {
     const m = new Map<string, GradingRow[]>()
     for (const r of filtered) {
-      // Use courseId only — titles/codes may contain "::" and would break string keys or split() parsing.
       const key = String(r.courseId)
       const arr = m.get(key) ?? []
       arr.push(r)
@@ -130,7 +129,7 @@ export default function GradingClient({
           <select
             value={courseFilter}
             onChange={(e) => setCourseFilter(e.target.value)}
-            className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"
+            className="border border-slate-300 max-w-[93vw] truncate text-ellipsis overflow-hidden rounded-lg px-3 py-2 text-sm bg-white"
           >
             <option value="all">All courses</option>
             {courses.map((c) => (
@@ -179,7 +178,7 @@ export default function GradingClient({
                     <tr className="border-b border-slate-200 text-left text-slate-600">
                       <th className="p-3 font-medium">Learner</th>
                       <th className="p-3 font-medium">Lesson</th>
-                      <th className="p-3 font-medium">Type</th>
+                      {/* <th className="p-3 font-medium">Type</th> */}
                       <th className="p-3 font-medium">Status</th>
                       <th className="p-3 font-medium">Files</th>
                       <th className="p-3 font-medium w-28">Score</th>
@@ -192,7 +191,7 @@ export default function GradingClient({
                       <tr key={r.submissionId} className="border-b border-slate-100 hover:bg-slate-50/80">
                         <td className="p-3 font-medium text-slate-900">{r.learnerName ?? r.learnerId.slice(0, 8)}</td>
                         <td className="p-3 text-slate-700">{r.moduleTitle}</td>
-                        <td className="p-3 text-slate-600 capitalize">{r.moduleType.replace('_', ' ')}</td>
+                        {/* <td className="p-3 text-slate-600 capitalize">{r.moduleType.replace('_', ' ')}</td> */}
                         <td className="p-3">
                           {r.gradedAt ? (
                             <span className="text-emerald-700 font-medium">Graded</span>
@@ -232,8 +231,8 @@ export default function GradingClient({
                               onChange={(e) =>
                                 setScores((s) => ({ ...s, [r.submissionId]: e.target.value }))
                               }
-                              className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-                              placeholder={`0–${r.maxScore}`}
+                              className="w-full min-w-14 truncate text-ellipsis overflow-hidden border border-slate-300 rounded px-2 py-1.5 text-sm"
+                              placeholder="0"
                             />
                             <span className="text-slate-500 text-xs whitespace-nowrap">/ {r.maxScore}</span>
                           </div>
