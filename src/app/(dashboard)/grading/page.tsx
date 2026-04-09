@@ -31,11 +31,25 @@ export type GradingRow = {
 function inferFileNameFromUrl(url: string | null | undefined): string | null {
   if (!url) return null
   try {
-    const pathname = new URL(url).pathname
+    const parsed = new URL(url)
+    const pathname = parsed.pathname
     const last = pathname.split('/').filter(Boolean).pop()
     if (!last) return null
     const decoded = decodeURIComponent(last).trim()
-    return decoded || null
+    if (!decoded) return null
+
+    // Ignore generic route segments from share links (e.g. /edit, /view, /open).
+    const blocked = new Set(['edit', 'view', 'open', 'preview', 'u', 'd'])
+    if (blocked.has(decoded.toLowerCase())) {
+      const queryHints = ['filename', 'file', 'name', 'title']
+      for (const key of queryHints) {
+        const hint = parsed.searchParams.get(key)?.trim()
+        if (hint) return hint
+      }
+      return null
+    }
+
+    return decoded
   } catch {
     return null
   }
