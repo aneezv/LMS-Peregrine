@@ -5,7 +5,7 @@ type Body = { moduleId?: string; answers?: Record<string, string> }
 type ReviewRow = {
   questionId: string
   prompt: string
-  selectedOptionId: string
+  selectedOptionId: string | null
   selectedLabel: string
   correctOptionId: string
   correctLabel: string
@@ -72,11 +72,11 @@ export async function POST(req: Request) {
   const promptByQ = new Map(
     questionRows.map((q) => [q.id as string, (q.prompt as string) ?? 'Question']),
   )
-  for (const qid of qIds) {
-    if (!answers[qid] || typeof answers[qid] !== 'string') {
-      return NextResponse.json({ error: 'Answer every question' }, { status: 400 })
-    }
-  }
+  // for (const qid of qIds) {
+  //   if (!answers[qid] || typeof answers[qid] !== 'string') {
+  //     return NextResponse.json({ error: 'Answer every question' }, { status: 400 })
+  //   }
+  // }
   for (const k of Object.keys(answers)) {
     if (!qIds.has(k)) {
       return NextResponse.json({ error: 'Invalid question id' }, { status: 400 })
@@ -114,21 +114,23 @@ export async function POST(req: Request) {
     const qid = q.id as string
     const picked = answers[qid]
     const allowed = optsByQ.get(qid) ?? []
-    const ok = allowed.some((o) => o.id === picked)
-    if (!ok) {
-      return NextResponse.json({ error: 'Invalid answer for a question' }, { status: 400 })
-    }
-    const chosen = allowed.find((o) => o.id === picked)
     const correct = allowed.find((o) => o.is_correct)
     if (!correct) {
       return NextResponse.json({ error: 'Quiz question has no correct option configured' }, { status: 400 })
     }
+    if (picked != null) {
+      const ok = allowed.some((o) => o.id === picked)
+      if (!ok) {
+        return NextResponse.json({ error: 'Invalid answer for a question' }, { status: 400 })
+      }
+    }
+    const chosen = picked != null ? allowed.find((o) => o.id === picked) : undefined
     if (chosen?.is_correct) score++
     review.push({
       questionId: qid,
       prompt: promptByQ.get(qid) ?? 'Question',
-      selectedOptionId: picked,
-      selectedLabel: chosen?.label ?? 'Selected option',
+      selectedOptionId: picked ?? null,
+      selectedLabel: chosen?.label ?? 'Unanswered',
       correctOptionId: correct.id,
       correctLabel: correct.label,
       isCorrect: !!chosen?.is_correct,

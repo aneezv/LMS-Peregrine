@@ -177,7 +177,7 @@ create index quiz_attempts_module_learner_submitted_idx
 create table public.quiz_attempt_answers (
   attempt_id uuid not null references public.quiz_attempts(id) on delete cascade,
   question_id uuid not null references public.quiz_questions(id) on delete cascade,
-  option_id uuid not null references public.quiz_options(id) on delete restrict,
+  option_id uuid references public.quiz_options(id) on delete restrict,
   primary key (attempt_id, question_id)
 );
 

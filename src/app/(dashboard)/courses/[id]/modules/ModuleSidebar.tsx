@@ -117,11 +117,11 @@ export default function ModuleSidebar({
         <div className="min-w-0 flex items-center justify-between gap-2 w-full">
           <Link
             href={`/courses/${courseId}`}
-            className="block flex-1 min-w-0 max-w-full truncate text-xs text-blue-600 hover:underline focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            className="block flex-1 min-w-0 max-w-full truncate text-xs text-blue-600 hover:underline focus-visible:rounded-sm  focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           >
             ← {courseTitle}
           </Link>
-          <span className="flex-shrink-0 rounded-full bg-blue-50 text-center px-2.5 py-1 text-xs font-semibold text-blue-700 ml-2">
+          <span className="shrink-0 rounded-full bg-blue-50 text-center px-2.5 py-1 text-xs font-semibold text-blue-700 ml-2">
             <em className="not-italic text-blue-700">{courseCode}</em>
           </span>
         </div>
@@ -163,7 +163,7 @@ export default function ModuleSidebar({
                   type="button"
                   id={triggerId}
                   onClick={() => toggleSection(section.id)}
-                  className="w-full flex items-center justify-between px-2 py-1.5 text-left group focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 rounded-md"
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-left group focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 rounded-md"
                   aria-expanded={expanded}
                   aria-controls={panelId}
                 >
@@ -220,7 +220,7 @@ export default function ModuleSidebar({
                           <Link
                             href={`/courses/${courseId}/modules/${mod.id}`}
                             aria-current={isActive ? 'page' : undefined}
-                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border text-sm transition motion-reduce:transition-none group focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border text-sm transition motion-reduce:transition-none group  focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
                               isActive
                                 ? 'bg-blue-50 border-blue-200 text-blue-800 shadow-sm'
                                 : 'border-transparent text-slate-700 hover:bg-slate-50 hover:border-slate-200'

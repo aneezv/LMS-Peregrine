@@ -22,7 +22,7 @@ export type QuizResult = {
 type QuizReview = {
   questionId: string
   prompt: string
-  selectedOptionId: string
+  selectedOptionId: string | null
   selectedLabel: string
   correctOptionId: string
   correctLabel: string
@@ -80,13 +80,15 @@ export default function QuizTakeClient({
   const hasTimeLimit =
     timeLimitMinutes != null && Number.isFinite(timeLimitMinutes) && timeLimitMinutes >= 1
 
-  const submitQuiz = useCallback(async () => {
+  const submitQuiz = useCallback(async (isAuto = false) => {
     setConfirmOpen(false)
     setError('')
-    for (const q of questions) {
-      if (!answersRef.current[q.id]) {
-        setError('Please answer every question.')
-        return
+    if (!isAuto) {
+      for (const q of questions) {
+        if (!answersRef.current[q.id]) {
+          setError('Please answer every question.')
+          return
+        }
       }
     }
     setSubmitting(true)
@@ -131,14 +133,10 @@ export default function QuizTakeClient({
         setRemainingSec(rem)
         if (rem <= 0 && !timeUpHandledRef.current) {
           timeUpHandledRef.current = true
+          setTimeExpired(true)
           const allDone = questions.every((q) => !!answersRef.current[q.id])
-          if (allDone) {
-            void submitQuizRef.current()
-          } else {
-            setTimeExpired(true)
-            setError("Time's up. You did not answer every question before the limit.")
-            window.localStorage.removeItem(draftKey)
-          }
+          void submitQuizRef.current(true)
+          window.localStorage.removeItem(draftKey)
         }
       } else {
         setElapsedSec(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)))
@@ -148,6 +146,70 @@ export default function QuizTakeClient({
     const timer = window.setInterval(tick, 1000)
     return () => window.clearInterval(timer)
   }, [startedAt, result, quizStarted, deadlineAt, timeExpired, questions])
+
+  useEffect(() => {
+  if (result) {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}, [result]);
+
+// begin of capturing effects related to unsaved progress warning
+
+useEffect(() => {
+  if (!quizStarted || result || submitting) return;
+
+  const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+    e.preventDefault();
+    e.returnValue = ''; 
+    return '';
+  };
+
+  window.addEventListener('beforeunload', handleBeforeUnload);
+  return () => {
+    window.removeEventListener('beforeunload', handleBeforeUnload);
+  };
+}, [quizStarted, result, submitting]);
+
+useEffect(() => {
+  if (!quizStarted || result) return;
+
+  // Push a new state so the user has to click "Back" twice to leave
+  window.history.pushState(null, '', window.location.href);
+
+  const handlePopState = () => {
+    const confirmLeave = window.confirm("You have a quiz in progress. Leaving will lose your progress. Are you sure?");
+    if (!confirmLeave) {
+      window.history.pushState(null, '', window.location.href);
+    } else {
+      window.history.back();
+    }
+  };
+
+  window.addEventListener('popstate', handlePopState);
+  return () => window.removeEventListener('popstate', handlePopState);
+}, [quizStarted, result]);
+
+useEffect(() => {
+  if (!quizStarted || result) return;
+
+  const handleInternalNavigation = (e: MouseEvent) => {
+    const target = e.target as HTMLElement;
+    const anchor = target.closest('a');
+
+    if (anchor && anchor.href && !anchor.href.includes('#')) {
+      const confirmLeave = window.confirm("Leave quiz? Progress will be lost.");
+      if (!confirmLeave) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
+  };
+
+  document.addEventListener('click', handleInternalNavigation, true);
+  return () => document.removeEventListener('click', handleInternalNavigation, true);
+}, [quizStarted, result]);
+
+// end of capturing effects related to unsaved progress warning
 
   useEffect(() => {
     if (result || hasTimeLimit || !quizStarted) return
@@ -164,112 +226,152 @@ export default function QuizTakeClient({
 
   if (result) {
     return (
-      <div className="space-y-4">
-        <div className={`rounded-xl border space-y-2 ${result.passed ? 'border-emerald-200 bg-emerald-50/70 ' : 'border-amber-200 bg-amber-50/70'} p-5 sm:p-6 `}>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-semibold uppercase tracking-wide text-slate-900">
-              {submittedNow ? 'Quiz evaluation' : 'Best saved result'}
-            </p>
-            <span className={`rounded-full bg-white/80 px-2.5 py-1 text-xs font-semibold ${result.passed ? 'text-emerald-700' : 'text-amber-700'}`}>
-            {result.passed ? (
-              <span className="inline-flex items-center gap-1.5 font-medium text-green-700">
-                <CheckCircle2 className="h-4 w-4" />
-                You passed (passing bar: {result.passingPct}%).
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 font-medium text-amber-800">
-                <AlertCircle className="h-4 w-4" />
-                Failed ({result.passingPct}% required).
-              </span>
-            )}
-            </span>
+      <div className="mx-auto max-w-3xl space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        {/* --- 1. RESULT HERO SECTION --- */}
+        <div className={`relative overflow-hidden rounded-2xl border-2 p-6 sm:p-8 shadow-sm ${
+          result.passed 
+            ? 'border-emerald-200 bg-linear-to-br from-emerald-50 to-white' 
+            : 'border-amber-200 bg-linear-to-br from-amber-50 to-white'
+        }`}>
+          {/* Decorative Background Icon */}
+          <div className="absolute -right-8 -top-8 opacity-10">
+            {result.passed ? <CheckCircle2 size={160} /> : <AlertCircle size={160} />}
           </div>
-          <p className={`text-sm ${result.passed ? 'text-emerald-800' : 'text-amber-800'}`}>
-            Score: <strong>{result.score}</strong> / {result.maxScore} ({result.percentCorrect}% correct)
-          </p>
-          {allowRetest ? (
-            <button
-              type="button"
-              onClick={() => {
-                setResult(null)
-                setAnswers({})
-                setError('')
-                setReviewRows([])
-                setSubmittedNow(false)
-                setConfirmOpen(false)
-                setQuizStarted(false)
-                setStartedAt(Date.now())
-                setElapsedSec(0)
-                setTimeExpired(false)
-                timeUpHandledRef.current = false
-                setDeadlineAt(null)
-                setRemainingSec(0)
-                window.localStorage.removeItem(draftKey)
-              }}
-              className="inline-flex items-center gap-2 rounded-lg border border-emerald-600 bg-white px-4 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100"
-            >
-              Retake quiz
-            </button>
-          ) : (
-            <p className="text-xs font-medium text-slate-600">Retest is disabled for this quiz.</p>
-          )}
+
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+            <div className="space-y-2">
+              <h2 className={`text-2xl font-bold ${result.passed ? 'text-emerald-900' : 'text-amber-900'}`}>
+                {result.passed ? 'Congratulations! You Passed' : 'Keep Practicing!'}
+              </h2>
+              <p className="text-slate-600 max-w-md text-sm sm:text-base">
+                {submittedNow 
+                  ? `You scored ${result.percentCorrect}% on this attempt.` 
+                  : "This is your best saved attempt from previous sessions."
+                } The passing threshold is <strong>{result.passingPct}%</strong>.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-6">
+              <div className="text-center">
+                <div className={`text-4xl font-black ${result.passed ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  {result.score}<span className="text-xl font-medium text-slate-400">/{result.maxScore}</span>
+                </div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Score</p>
+              </div>
+              
+              <div className="h-12 w-px bg-slate-200 hidden sm:block" />
+
+              {allowRetest ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResult(null)
+                    setAnswers({})
+                    setError('')
+                    setReviewRows([])
+                    setSubmittedNow(false)
+                    setConfirmOpen(false)
+                    setQuizStarted(false)
+                    setStartedAt(Date.now())
+                    setElapsedSec(0)
+                    setTimeExpired(false)
+                    timeUpHandledRef.current = false
+                    setDeadlineAt(null)
+                    setRemainingSec(0)
+                    window.localStorage.removeItem(draftKey)
+                  }}
+                  className="rounded-xl bg-slate-900 px-6 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 shadow-lg shadow-slate-200"
+                >
+                  Try Again
+                </button>
+              ) : (
+                <p className="text-xs font-bold text-slate-400 uppercase">Retest Disabled</p>
+              )}
+            </div>
+          </div>
         </div>
 
-        {submittedNow && reviewRows.length > 0 && (
-          <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-900">Answer review</h4>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                {reviewRows.filter((r) => r.isCorrect).length}/{reviewRows.length} correct
-              </span>
+        {/* --- 2. ENHANCED REVIEW LIST (Only shows on immediate submit) --- */}
+        {submittedNow && reviewRows.length > 0 ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between px-1">
+              <h3 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Review Answers</h3>
+              <div className="text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                {reviewRows.filter(r => r.isCorrect).length} Correct / {reviewRows.length} Total
+              </div>
             </div>
-            <ul className="space-y-3">
+
+            <div className="grid gap-4">
               {reviewRows.map((row, idx) => (
-                <li
+                <div
                   key={row.questionId}
-                  className={`rounded-xl border p-3 text-sm sm:p-4 ${
-                    row.isCorrect
-                      ? 'border-emerald-200 bg-emerald-50/50'
-                      : 'border-amber-200 bg-amber-50/50'
+                  className={`group overflow-hidden rounded-2xl border transition-all ${
+                    row.isCorrect 
+                      ? 'border-slate-200 bg-white hover:border-emerald-200' 
+                      : 'border-slate-200 bg-white hover:border-red-200 shadow-sm'
                   }`}
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <p className="font-medium text-slate-900">
-                      <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-semibold text-slate-700">
-                        {idx + 1}
-                      </span>
-                      {row.prompt}
-                    </p>
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                        row.isCorrect
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-amber-100 text-amber-800'
-                      }`}
-                    >
-                      {row.isCorrect ? 'Correct' : 'Incorrect'}
-                    </span>
-                  </div>
-
-                  <div className="mt-2 space-y-1.5">
-                    <p className={row.isCorrect ? 'text-emerald-700' : 'text-amber-800'}>
-                      Your answer: <span className="font-semibold">{row.selectedLabel}</span>
-                    </p>
-                    {!row.isCorrect && (
-                      <p className="text-emerald-700">
-                        Correct answer: <span className="font-semibold">{row.correctLabel}</span>
+                  <div className="flex items-start gap-4 p-4 sm:p-5">
+                    {/* Number Indicator */}
+                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold ${
+                      row.isCorrect ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                    }`}>
+                      {idx + 1}
+                    </div>
+                    
+                    <div className="flex-1 space-y-4">
+                      <p className="text-base font-semibold leading-tight text-slate-800">
+                        {row.prompt}
                       </p>
-                    )}
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {/* User Selection */}
+                        <div className={`rounded-xl border p-3 ${
+                          row.isCorrect 
+                            ? 'border-emerald-100 bg-emerald-50/50' 
+                            : 'border-red-100 bg-red-50/50'
+                        }`}>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+                            Your Answer
+                          </p>
+                          <div className="flex items-center gap-2">
+                            {row.isCorrect ? (
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                            ) : (
+                              <AlertCircle className="h-4 w-4 text-red-600" />
+                            )}
+                            <span className={`text-sm font-medium ${row.isCorrect ? 'text-emerald-900' : 'text-red-900'}`}>
+                              {row.selectedLabel || "No answer provided"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Correct Answer (Show only if user was wrong) */}
+                        {!row.isCorrect && (
+                          <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+                              Correct Answer
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                              <span className="text-sm font-medium text-emerald-900">
+                                {row.correctLabel}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </li>
+                </div>
               ))}
-            </ul>
+            </div>
           </div>
-        )}
+        ): null}
       </div>
     )
   }
-
+  
   function requestSubmit() {
     if (timeExpired) return
     setError('')
@@ -332,46 +434,41 @@ export default function QuizTakeClient({
 
   return (
     <div className="space-y-6 pb-20 lg:pb-0">
-      {timeExpired && (
-        <div
-          className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-medium text-red-900"
-          role="alert"
-        >
-          Time&apos;s up. Your answers were not submitted. Contact your instructor if you need another
-          attempt.
+      {timeExpired && !result && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 animate-pulse">
+          Time&apos;s up! We are submitting your answers automatically...
         </div>
       )}
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-slate-800">
-            Exam mode
-            {hasTimeLimit ? (
-              <span className="ml-2 font-normal text-slate-600">· Timed</span>
-            ) : null}
-          </p>
-          <div className="flex items-center gap-2">
-            <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">
-              Answered {answeredCount}/{questions.length}
-            </span>
-            <span
-              className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                hasTimeLimit
-                  ? remainingSec <= 120
-                    ? 'border-amber-400 bg-amber-50 text-amber-900'
+      <div className="fixed inset-x-0 top-0 z-50 rounded-none border-b border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur-md lg:sticky lg:top-18 lg:z-30 lg:mb-6 lg:rounded-xl lg:border lg:bg-slate-50/95">
+        <div className="mx-auto max-w-3xl"> {/* Keeps content aligned with your quiz width */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-slate-800">
+              Progress
+            </p>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 border border-slate-100">
+                Answered {answeredCount}/{questions.length}
+              </span>
+              <span
+                className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${hasTimeLimit
+                    ? remainingSec <= 300
+                      ? `border-amber-500 bg-amber-100 text-amber-900 ${remainingSec <= 60 && remainingSec > 0 ? 'animate-pulse' : ''}`
+                      : 'border-slate-200 bg-white text-slate-600'
                     : 'border-slate-200 bg-white text-slate-600'
-                  : 'border-slate-200 bg-white text-slate-600'
-              }`}
-            >
-              {hasTimeLimit ? `Time left ${formatElapsed(remainingSec)}` : `Elapsed ${formatElapsed(elapsedSec)}`}
-            </span>
+                  }`}
+              >
+                {hasTimeLimit ? `Time left ${formatElapsed(remainingSec)}` : `Elapsed ${formatElapsed(elapsedSec)}`}
+              </span>
+            </div>
           </div>
-        </div>
-        <div className="mt-2 h-2 w-full overflow-hidden rounded-full border border-slate-200 bg-white">
-          <div
-            className="h-full rounded-full bg-cyan-600 transition-[width] duration-200"
-            style={{ width: `${questions.length ? Math.round((answeredCount / questions.length) * 100) : 0}%` }}
-            aria-hidden
-          />
+
+          <div className="mt-2 h-2 w-full overflow-hidden rounded-full border border-slate-200 bg-white">
+            <div
+              className="h-full rounded-full bg-cyan-600 transition-[width] duration-300 ease-in-out"
+              style={{ width: `${questions.length ? Math.round((answeredCount / questions.length) * 100) : 0}%` }}
+              aria-hidden
+            />
+          </div>
         </div>
       </div>
 
@@ -393,11 +490,10 @@ export default function QuizTakeClient({
               return (
                 <li key={o.id}>
                   <label
-                    className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2 text-sm transition ${
-                      selected
+                    className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2 text-sm transition ${selected
                         ? 'border-cyan-400 bg-cyan-50 text-cyan-900'
                         : 'border-slate-200 bg-slate-50 text-slate-800 hover:border-slate-300 hover:bg-slate-100'
-                    }`}
+                      }`}
                   >
                     <input
                       type="radio"
@@ -474,7 +570,7 @@ export default function QuizTakeClient({
           <div
             role="dialog"
             aria-modal="true"
-            className="fixed inset-x-4 top-1/2 z-[60] mx-auto w-full max-w-md -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-5 shadow-2xl"
+            className="fixed inset-x-4 top-1/2 z-60 mx-auto w-full max-w-md -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-5 shadow-2xl"
           >
             <h3 className="text-base font-semibold text-slate-900">Submit quiz?</h3>
             <p className="mt-2 text-sm text-slate-600">
