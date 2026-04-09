@@ -40,14 +40,6 @@ export async function PATCH(request: Request) {
   const admin = createAdminClient()
   const db = admin ?? supabase
 
-  console.log('[assignments/grade]', {
-    submissionId,
-    role,
-    userId: user.id,
-    hasAdminClient: !!admin,
-    db: admin ? 'service_role' : 'user_session',
-  })
-
   const { data: sub, error: sErr } = await db
     .from('submissions')
     .select('assignment_id')
@@ -113,16 +105,9 @@ export async function PATCH(request: Request) {
     .eq('id', submissionId)
 
   if (uErr) {
-    console.error('[assignments/grade] update failed', uErr)
+    console.error(uErr)
     return NextResponse.json({ error: uErr.message }, { status: 500 })
   }
-
-  console.log('[assignments/grade] graded', {
-    submissionId,
-    score: Math.round(body.score),
-    isPassed,
-    gradedAt: now,
-  })
 
   return NextResponse.json({ ok: true, gradedAt: now, isPassed })
 }

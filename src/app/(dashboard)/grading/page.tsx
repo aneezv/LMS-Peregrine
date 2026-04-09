@@ -5,6 +5,15 @@ import GradingClient, { type GradingCourseOption } from './GradingClient'
 import { PageHeader } from '@/components/ui/primitives'
 import { ROLES, isStaffRole } from '@/lib/roles'
 
+/** PostgREST builds long query strings for `.in(...)`; keep chunks well under proxy URL limits. */
+const SUPABASE_IN_CHUNK = 40
+
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
+}
+
 export type GradingRow = {
   submissionId: string
   assignmentId: string
@@ -152,25 +161,55 @@ export default async function GradingPage() {
   }
 
   const learnerIds = [...new Set(submissionList.map((s) => s.learner_id))]
-  const { data: profs } = await db.from('profiles').select('id, full_name').in('id', learnerIds)
-  const nameByLearner = new Map((profs ?? []).map((p) => [p.id, p.full_name]))
+  const nameByLearner = new Map<string, string | null>()
+  for (const idChunk of chunkArray(learnerIds, SUPABASE_IN_CHUNK)) {
+    const { data: profs, error: profErr } = await db
+      .from('profiles')
+      .select('id, full_name')
+      .in('id', idChunk)
+    if (!profErr) {
+      for (const p of profs ?? []) nameByLearner.set(p.id, p.full_name)
+    }
+  }
 
   const subIds = submissionList.map((s) => s.id)
   const filesBySub = new Map<string, { url: string; name: string }[]>()
   if (subIds.length > 0) {
-    const { data: sfiles } = await db
-      .from('submission_files')
-      .select('submission_id, file_url, original_name, sort_order, created_at')
-      .in('submission_id', subIds)
-      .order('sort_order', { ascending: true })
-      .order('created_at', { ascending: true })
+    const allSfiles: {
+      submission_id: string
+      file_url: string
+      original_name: string | null
+      sort_order: number
+      created_at: string
+    }[] = []
 
-    for (const f of sfiles ?? []) {
+    for (const idChunk of chunkArray(subIds, SUPABASE_IN_CHUNK)) {
+      const { data: sfiles, error: sfilesErr } = await db
+        .from('submission_files')
+        .select('submission_id, file_url, original_name, sort_order, created_at')
+        .in('submission_id', idChunk)
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true })
+
+      if (!sfilesErr) {
+        allSfiles.push(...(sfiles ?? []))
+      }
+    }
+
+    allSfiles.sort((a, b) => {
+      if (a.submission_id !== b.submission_id) return a.submission_id.localeCompare(b.submission_id)
+      if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order
+      return String(a.created_at).localeCompare(String(b.created_at))
+    })
+
+    for (const f of allSfiles) {
       if (!f.file_url) continue
       const arr = filesBySub.get(f.submission_id) ?? []
       const explicit = typeof f.original_name === 'string' ? f.original_name.trim() : ''
       const inferred = inferFileNameFromUrl(f.file_url)
-      arr.push({ url: f.file_url, name: explicit || inferred || 'Submission' })
+      const chosen = explicit || inferred || 'Submission'
+
+      arr.push({ url: f.file_url, name: chosen })
       filesBySub.set(f.submission_id, arr)
     }
   }
@@ -182,12 +221,14 @@ export default async function GradingPage() {
 
     const extra = filesBySub.get(s.id) ?? []
     const dedup = new Set<string>()
-    const files = (extra.length > 0
-      ? extra
-      : s.file_url
-        ? [{ url: s.file_url, name: inferFileNameFromUrl(s.file_url) ?? 'Submission' }]
-        : []
-    ).filter((f) => {
+    let fileList: { url: string; name: string }[] = []
+    if (extra.length > 0) {
+      fileList = extra
+    } else if (s.file_url) {
+      const legacyName = inferFileNameFromUrl(s.file_url) ?? 'Submission'
+      fileList = [{ url: s.file_url, name: legacyName }]
+    }
+    const files = fileList.filter((f) => {
       if (!f.url || dedup.has(f.url)) return false
       dedup.add(f.url)
       return true
