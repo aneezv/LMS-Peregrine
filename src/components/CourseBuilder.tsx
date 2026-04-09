@@ -46,6 +46,8 @@ import { syncQuizAndExternalForModule } from '@/lib/sync-module-quiz-external'
 import { parseQuizCsv } from '@/lib/parse-quiz-csv'
 import { toRenderableImageUrl } from '@/lib/drive-image'
 import { ROLES } from '@/lib/roles'
+import { toast } from 'sonner'
+import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog'
 
 type ModuleType =
   | 'video'
@@ -485,6 +487,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
   const [loading, setLoading] = useState(!!courseId)
   const [loadError, setLoadError] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [baselineSnapshot, setBaselineSnapshot] = useState('')
   const [baselineReady, setBaselineReady] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -1132,7 +1135,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
 
   const handleDeleteCourse = async () => {
     if (!courseId) return
-    if (!confirm('Delete this course and all related lessons and data? This cannot be undone.')) return
+    setConfirmDeleteOpen(false)
     setDeleting(true)
     setError('')
     setActionError('')
@@ -1142,8 +1145,10 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
     if (dErr) {
       console.error('[CourseBuilder] delete course', dErr)
       setActionError('Something went wrong.')
+      toast.error(dErr.message || 'Could not delete course.')
       return
     }
+    toast.success('Course deleted.')
     router.push('/dashboard')
     router.refresh()
   }
@@ -1986,7 +1991,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           {courseId && (
             <button
               type="button"
-              onClick={() => void handleDeleteCourse()}
+              onClick={() => setConfirmDeleteOpen(true)}
               disabled={deleting || saving}
               className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-50"
             >
@@ -2029,6 +2034,16 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           </button>
         </div>
       </div>
+      <ConfirmationDialog
+        open={confirmDeleteOpen}
+        title="Delete this course?"
+        description="This removes the course and all related lessons/data. This action cannot be undone."
+        confirmLabel="Delete course"
+        confirmVariant="danger"
+        busy={deleting}
+        onCancel={() => setConfirmDeleteOpen(false)}
+        onConfirm={() => void handleDeleteCourse()}
+      />
     </div>
   )
 }

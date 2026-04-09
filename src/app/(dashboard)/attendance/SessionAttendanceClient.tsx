@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/utils/supabase/client'
+import { toast } from 'sonner'
 
 export type RosterRow = {
   id: string
@@ -38,7 +39,6 @@ export default function SessionAttendanceClient({
   onAfterSubmit?: () => void
 }) {
   const [rows, setRows] = useState<RosterRow[]>(() => normalizeRowsForEditing(initialRows))
-  const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -48,13 +48,11 @@ export default function SessionAttendanceClient({
   const submittedOnce = rows.some((r) => r.roster_submitted_at != null)
 
   function togglePresent(rowId: string, next: boolean) {
-    setMsg(null)
     setRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, is_present: next } : r)))
   }
 
   async function submitAttendance() {
     setBusy(true)
-    setMsg(null)
     const supabase = createClient()
     const ts = new Date().toISOString()
 
@@ -70,32 +68,20 @@ export default function SessionAttendanceClient({
         .eq('id', r.id)
 
       if (error) {
-        setMsg({ type: 'err', text: error.message })
+        toast.error(error.message)
         setBusy(false)
         return
       }
     }
 
     setRows((prev) => prev.map((r) => ({ ...r, roster_submitted_at: ts })))
-    setMsg({ type: 'ok', text: 'Attendance submitted.' })
+    toast.success('Attendance submitted.')
     setBusy(false)
     onAfterSubmit?.()
   }
 
   return (
     <div className="space-y-6">
-      {msg && (
-        <div
-          className={`rounded-lg px-4 py-3 text-sm ${
-            msg.type === 'ok'
-              ? 'bg-green-50 text-green-800 border border-green-200'
-              : 'bg-red-50 text-red-800 border border-red-200'
-          }`}
-        >
-          {msg.text}
-        </div>
-      )}
-
       {!submittedOnce && rows.length > 0 && (
         <p className="text-sm text-slate-600 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
           Everyone starts as <strong className="text-slate-800">Present</strong> for quick editing. Uncheck absences,

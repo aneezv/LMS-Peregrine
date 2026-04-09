@@ -19,6 +19,7 @@ import {
   type OfflineBindQueueItem,
 } from '@/lib/offline-bind-queue'
 import { Camera, Scan, Search, X, XCircle } from 'lucide-react'
+import { toast } from 'sonner'
 
 type LearnerOption = { id: string; full_name: string | null; email: string | null }
 
@@ -67,10 +68,6 @@ export default function BindCardsClient({
   const [codeInput, setCodeInput] = useState('')
   const [previewLookup, setPreviewLookup] = useState<LookupOfflineIdCardResult | null>(null)
   const [lookupErr, setLookupErr] = useState<string | null>(null)
-  const [bindActionMessage, setBindActionMessage] = useState<{
-    variant: 'success' | 'error' | 'queued'
-    text: string
-  } | null>(null)
   const [busy, setBusy] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [scanErr, setScanErr] = useState<string | null>(null)
@@ -299,7 +296,6 @@ export default function BindCardsClient({
 
   async function runPreview() {
     setLookupErr(null)
-    setBindActionMessage(null)
     setPreviewLookup(null)
     if (!OFFLINE_ID_CODE_RE.test(normalizedCode)) {
       setLookupErr('Enter a code like ID-ABC-XYZ (scan or type).')
@@ -322,7 +318,6 @@ export default function BindCardsClient({
 
   async function runBind() {
     setLookupErr(null)
-    setBindActionMessage(null)
     if (!courseId || !learnerPick || !OFFLINE_ID_CODE_RE.test(normalizedCode)) {
       setLookupErr('Choose a course, learner, and valid card code.')
       return
@@ -348,10 +343,7 @@ export default function BindCardsClient({
         await refreshQueueUi()
         setCodeInput('')
         setPreviewLookup(null)
-        setBindActionMessage({
-          variant: 'queued',
-          text: 'Bind queued for sync when you are back online.',
-        })
+        toast.warning('Bind queued for sync when you are back online.')
         return
       }
       try {
@@ -364,7 +356,7 @@ export default function BindCardsClient({
           setCodeInput('')
           setPreviewLookup(null)
           await refreshQueueUi()
-          setBindActionMessage({ variant: 'success', text: 'Card bound successfully.' })
+          toast.success('Card bound successfully.')
           return
         }
         if (
@@ -382,13 +374,10 @@ export default function BindCardsClient({
           await refreshQueueUi()
           setCodeInput('')
           setPreviewLookup(null)
-          setBindActionMessage({
-            variant: 'queued',
-            text: 'Could not reach server — bind queued for sync.',
-          })
+          toast.warning('Could not reach server - bind queued for sync.')
           return
         }
-        setBindActionMessage({ variant: 'error', text: res.message })
+        toast.error(res.message)
       } catch {
         await enqueueOfflineBind({
           localId: newLocalId(),
@@ -400,10 +389,7 @@ export default function BindCardsClient({
         await refreshQueueUi()
         setCodeInput('')
         setPreviewLookup(null)
-        setBindActionMessage({
-          variant: 'queued',
-          text: 'Network error — bind queued for sync.',
-        })
+        toast.warning('Network error - bind queued for sync.')
       }
     } finally {
       setBusy(false)
@@ -413,12 +399,8 @@ export default function BindCardsClient({
   async function runUnbind() {
     if (!allowUnbind) return
     setLookupErr(null)
-    setBindActionMessage(null)
     if (!online) {
-      setBindActionMessage({
-        variant: 'error',
-        text: 'Unbind needs an internet connection.',
-      })
+      toast.error('Unbind needs an internet connection.')
       return
     }
     if (!courseId || !OFFLINE_ID_CODE_RE.test(normalizedCode)) {
@@ -441,15 +423,12 @@ export default function BindCardsClient({
       if (res.ok) {
         const resPreview = await lookupOfflineIdCard(normalizedCode)
         if (resPreview.ok) setPreviewLookup(resPreview)
-        setBindActionMessage({ variant: 'success', text: 'Card unbound — you can assign it again.' })
+        toast.success('Card unbound - you can assign it again.')
         return
       }
-      setBindActionMessage({ variant: 'error', text: res.message })
+      toast.error(res.message)
     } catch {
-      setBindActionMessage({
-        variant: 'error',
-        text: 'Unbind failed. Check your connection and try again.',
-      })
+      toast.error('Unbind failed. Check your connection and try again.')
     } finally {
       setBusy(false)
     }
@@ -499,7 +478,6 @@ export default function BindCardsClient({
               setLearnerHits([])
               setLearnerSearchNote(null)
               setPreviewLookup(null)
-              setBindActionMessage(null)
             }}
             className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"
           >
@@ -532,7 +510,6 @@ export default function BindCardsClient({
                 setLearnerQuery(e.target.value)
                 setLearnerPick(null)
                 setLearnerSearchNote(null)
-                setBindActionMessage(null)
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -597,7 +574,6 @@ export default function BindCardsClient({
               onChange={(e) => {
                 setCodeInput(e.target.value.toUpperCase())
                 setPreviewLookup(null)
-                setBindActionMessage(null)
               }}
               placeholder="ID-ABC-XYZ"
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono tracking-wide"
@@ -673,19 +649,6 @@ export default function BindCardsClient({
         {lookupErr && (
           <div className="rounded-lg px-3 py-2 text-sm bg-red-50 text-red-800 border border-red-200">
             {lookupErr}
-          </div>
-        )}
-        {bindActionMessage && (
-          <div
-            className={`rounded-lg px-3 py-2 text-sm border ${
-              bindActionMessage.variant === 'success'
-                ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
-                : bindActionMessage.variant === 'queued'
-                  ? 'bg-amber-50 text-amber-900 border-amber-200'
-                  : 'bg-red-50 text-red-800 border-red-200'
-            }`}
-          >
-            {bindActionMessage.text}
           </div>
         )}
         {!online && (

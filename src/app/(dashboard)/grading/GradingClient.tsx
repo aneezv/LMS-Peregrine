@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import type { GradingRow } from './page'
 import { ExternalLink, Save } from 'lucide-react'
+import { toast } from 'sonner'
 
 export type GradingCourseOption = { id: string; title: string; course_code: string }
 
@@ -39,7 +40,6 @@ export default function GradingClient({
     return o
   })
   const [saving, setSaving] = useState<string | null>(null)
-  const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
   const filtered = useMemo(() => {
     const list =
@@ -62,16 +62,15 @@ export default function GradingClient({
 
   async function saveGrade(submissionId: string, maxScore: number) {
     setSaving(submissionId)
-    setMsg(null)
     const raw = scores[submissionId]?.trim()
     const sc = raw === '' || raw === undefined ? NaN : Number(raw)
     if (Number.isNaN(sc) || sc < 0) {
-      setMsg({ type: 'err', text: 'Enter a valid score.' })
+      toast.error('Enter a valid score.')
       setSaving(null)
       return
     }
     if (sc > maxScore) {
-      setMsg({ type: 'err', text: `Score cannot exceed ${maxScore}.` })
+      toast.error(`Score cannot exceed ${maxScore}.`)
       setSaving(null)
       return
     }
@@ -89,7 +88,7 @@ export default function GradingClient({
     const payload = (await res.json().catch(() => ({}))) as { error?: string }
 
     if (!res.ok) {
-      setMsg({ type: 'err', text: payload.error ?? 'Save failed.' })
+      toast.error(payload.error ?? 'Save failed.')
       setSaving(null)
       return
     }
@@ -107,22 +106,12 @@ export default function GradingClient({
           : r,
       ),
     )
-    setMsg({ type: 'ok', text: 'Grade saved.' })
+    toast.success('Grade saved.')
     setSaving(null)
   }
 
   return (
     <div className="space-y-4">
-      {msg && (
-        <div
-          className={`rounded-lg px-4 py-3 text-sm ${
-            msg.type === 'ok' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'
-          }`}
-        >
-          {msg.text}
-        </div>
-      )}
-
       <div className="flex flex-wrap items-center gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <label className="text-sm font-medium text-slate-700">Course</label>

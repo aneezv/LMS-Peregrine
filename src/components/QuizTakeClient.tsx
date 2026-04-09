@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog'
 
 export type QuizQuestionPublic = {
   id: string
@@ -65,6 +66,8 @@ export default function QuizTakeClient({
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false)
+  const [pendingLeaveHref, setPendingLeaveHref] = useState<string | null>(null)
   const [quizStarted, setQuizStarted] = useState(false)
   const [startedAt, setStartedAt] = useState<number>(() => Date.now())
   const [elapsedSec, setElapsedSec] = useState(0)
@@ -74,6 +77,7 @@ export default function QuizTakeClient({
   const timeUpHandledRef = useRef(false)
   const [reviewRows, setReviewRows] = useState<QuizReview[]>([])
   const [submittedNow, setSubmittedNow] = useState(false)
+  const skipPopConfirmRef = useRef(false)
   const answeredCount = questions.reduce((acc, q) => acc + (answers[q.id] ? 1 : 0), 0)
   const unansweredCount = Math.max(0, questions.length - answeredCount)
   const draftKey = useMemo(() => `quiz-draft:${moduleId}`, [moduleId])
@@ -173,16 +177,17 @@ useEffect(() => {
 useEffect(() => {
   if (!quizStarted || result) return;
 
-  // Push a new state so the user has to click "Back" twice to leave
+  // Keep a history guard entry so we can show a custom leave modal on Back.
   window.history.pushState(null, '', window.location.href);
 
   const handlePopState = () => {
-    const confirmLeave = window.confirm("You have a quiz in progress. Leaving will lose your progress. Are you sure?");
-    if (!confirmLeave) {
-      window.history.pushState(null, '', window.location.href);
-    } else {
-      window.history.back();
+    if (skipPopConfirmRef.current) {
+      skipPopConfirmRef.current = false
+      return
     }
+    window.history.pushState(null, '', window.location.href)
+    setPendingLeaveHref(null)
+    setLeaveDialogOpen(true)
   };
 
   window.addEventListener('popstate', handlePopState);
@@ -196,18 +201,30 @@ useEffect(() => {
     const target = e.target as HTMLElement;
     const anchor = target.closest('a');
 
-    if (anchor && anchor.href && !anchor.href.includes('#')) {
-      const confirmLeave = window.confirm("Leave quiz? Progress will be lost.");
-      if (!confirmLeave) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    }
+    if (!anchor || !anchor.href) return
+    if (anchor.target === '_blank' || anchor.hasAttribute('download')) return
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    if (anchor.href.includes('#')) return
+
+    e.preventDefault();
+    e.stopPropagation();
+    setPendingLeaveHref(anchor.href)
+    setLeaveDialogOpen(true)
   };
 
   document.addEventListener('click', handleInternalNavigation, true);
   return () => document.removeEventListener('click', handleInternalNavigation, true);
 }, [quizStarted, result]);
+
+  const handleConfirmLeave = useCallback(() => {
+    setLeaveDialogOpen(false)
+    if (pendingLeaveHref) {
+      window.location.assign(pendingLeaveHref)
+      return
+    }
+    skipPopConfirmRef.current = true
+    window.history.back()
+  }, [pendingLeaveHref])
 
 // end of capturing effects related to unsaved progress warning
 
@@ -559,44 +576,27 @@ useEffect(() => {
         </div>
       </div>
 
-      {confirmOpen && (
-        <>
-          <button
-            type="button"
-            onClick={() => setConfirmOpen(false)}
-            className="fixed inset-0 z-50 bg-slate-900/40"
-            aria-label="Close submit confirmation"
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            className="fixed inset-x-4 top-1/2 z-60 mx-auto w-full max-w-md -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-5 shadow-2xl"
-          >
-            <h3 className="text-base font-semibold text-slate-900">Submit quiz?</h3>
-            <p className="mt-2 text-sm text-slate-600">
-              This submission will be checked now. Marks and pass status use your best attempt.
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmOpen(false)}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void submitQuiz()}
-                disabled={submitting}
-                className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white hover:bg-cyan-700 disabled:opacity-50"
-              >
-                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Confirm submit
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+      <ConfirmationDialog
+        open={confirmOpen}
+        title="Submit quiz?"
+        description="This submission will be checked now. Marks and pass status use your best attempt."
+        confirmLabel="Confirm submit"
+        busy={submitting}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => void submitQuiz()}
+      />
+      <ConfirmationDialog
+        open={leaveDialogOpen}
+        title="Leave quiz?"
+        description="You have a quiz in progress. Leaving now will discard unsaved progress."
+        confirmLabel="Leave quiz"
+        confirmVariant="danger"
+        onCancel={() => {
+          setLeaveDialogOpen(false)
+          setPendingLeaveHref(null)
+        }}
+        onConfirm={handleConfirmLeave}
+      />
     </div>
   )
 }
