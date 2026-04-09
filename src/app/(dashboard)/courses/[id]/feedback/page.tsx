@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, MessageSquare } from 'lucide-react'
 import { AppCard } from '@/components/ui/primitives'
+import { ROLES } from '@/lib/roles'
 
 export default async function CourseFeedbackPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: courseId } = await params
@@ -24,7 +25,7 @@ export default async function CourseFeedbackPage({ params }: { params: Promise<{
     .eq('id', user.id)
     .maybeSingle()
 
-  const isAdmin = viewerProfile?.role === 'admin'
+  const isAdmin = viewerProfile?.role === ROLES.ADMIN
   const isCourseInstructor = course.instructor_id === user.id
   const isCourseStaff = isCourseInstructor || isAdmin
 

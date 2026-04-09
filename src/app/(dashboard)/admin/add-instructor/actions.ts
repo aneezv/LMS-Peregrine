@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { ROLES } from '@/lib/roles'
 
 export type CreateInstructorState = {
   ok: boolean | null
@@ -22,7 +23,7 @@ export async function createInstructorAccount(
   }
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') {
+  if (profile?.role !== ROLES.ADMIN) {
     return { ok: false, error: 'Only administrators can create instructor accounts.' }
   }
 
@@ -58,7 +59,7 @@ export async function createInstructorAccount(
   const { error: profileErr } = await admin
     .from('profiles')
     .update({
-      role: 'instructor',
+      role: ROLES.INSTRUCTOR,
       full_name: fullName,
       email,
       updated_at: new Date().toISOString(),

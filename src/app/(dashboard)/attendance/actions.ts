@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { ensureSessionRosterRows } from '@/lib/ensure-session-roster'
 import type { RosterRow } from './SessionAttendanceClient'
+import { ROLES, isInstructorRole } from '@/lib/roles'
 
 export async function prepareSessionRoster(courseId: string, moduleId: string): Promise<{ rows: RosterRow[] } | { error: string }> {
   const supabase = await createClient()
@@ -12,12 +13,12 @@ export async function prepareSessionRoster(courseId: string, moduleId: string): 
   if (!user) return { error: 'Not signed in' }
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  const role = profile?.role ?? 'learner'
-  if (role !== 'instructor' && role !== 'admin') return { error: 'Forbidden' }
+  const role = profile?.role ?? ROLES.LEARNER
+  if (!isInstructorRole(role)) return { error: 'Forbidden' }
 
   const { data: course } = await supabase.from('courses').select('instructor_id').eq('id', courseId).single()
   if (!course) return { error: 'Course not found' }
-  if (role !== 'admin' && course.instructor_id !== user.id) return { error: 'Forbidden' }
+  if (role !== ROLES.ADMIN && course.instructor_id !== user.id) return { error: 'Forbidden' }
 
   const { data: mod } = await supabase
     .from('modules')

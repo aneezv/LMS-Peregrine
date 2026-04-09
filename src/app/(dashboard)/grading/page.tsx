@@ -28,6 +28,19 @@ export type GradingRow = {
   files: { url: string; name: string }[]
 }
 
+function inferFileNameFromUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+  try {
+    const pathname = new URL(url).pathname
+    const last = pathname.split('/').filter(Boolean).pop()
+    if (!last) return null
+    const decoded = decodeURIComponent(last).trim()
+    return decoded || null
+  } catch {
+    return null
+  }
+}
+
 export default async function GradingPage() {
   const supabase = await createClient()
   const admin = createAdminClient()
@@ -133,12 +146,17 @@ export default async function GradingPage() {
   if (subIds.length > 0) {
     const { data: sfiles } = await db
       .from('submission_files')
-      .select('submission_id, file_url, original_name')
+      .select('submission_id, file_url, original_name, sort_order, created_at')
       .in('submission_id', subIds)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true })
 
     for (const f of sfiles ?? []) {
+      if (!f.file_url) continue
       const arr = filesBySub.get(f.submission_id) ?? []
-      arr.push({ url: f.file_url, name: f.original_name })
+      const explicit = typeof f.original_name === 'string' ? f.original_name.trim() : ''
+      const inferred = inferFileNameFromUrl(f.file_url)
+      arr.push({ url: f.file_url, name: explicit || inferred || 'Submission' })
       filesBySub.set(f.submission_id, arr)
     }
   }
@@ -149,12 +167,17 @@ export default async function GradingPage() {
     if (!meta) continue
 
     const extra = filesBySub.get(s.id) ?? []
-    const files =
-      extra.length > 0
-        ? extra
-        : s.file_url
-          ? [{ url: s.file_url, name: 'Submission' }]
-          : []
+    const dedup = new Set<string>()
+    const files = (extra.length > 0
+      ? extra
+      : s.file_url
+        ? [{ url: s.file_url, name: inferFileNameFromUrl(s.file_url) ?? 'Submission' }]
+        : []
+    ).filter((f) => {
+      if (!f.url || dedup.has(f.url)) return false
+      dedup.add(f.url)
+      return true
+    })
 
     rows.push({
       submissionId: s.id,

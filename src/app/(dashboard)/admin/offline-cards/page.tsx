@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { AppCard, PageHeader } from '@/components/ui/primitives'
 import ImportOfflineCardsClient from './ImportOfflineCardsClient'
+import { ROLES } from '@/lib/roles'
 
 export default async function AdminOfflineCardsImportPage() {
   const supabase = await createClient()
@@ -11,7 +12,7 @@ export default async function AdminOfflineCardsImportPage() {
   if (!user) redirect('/login')
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') {
+  if (profile?.role !== ROLES.ADMIN) {
     redirect('/unauthorized')
   }
 

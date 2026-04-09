@@ -22,6 +22,7 @@ import { groupModulesByWeek } from '@/lib/course-modules'
 import { getLearnerModuleStatusMap } from '@/lib/learner-module-status'
 import { toRenderableImageUrl } from '@/lib/drive-image'
 import { formatLocalDisplay } from '@/lib/timestamp'
+import { ROLES } from '@/lib/roles'
 
 export default async function CourseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -47,7 +48,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
     .eq('id', user.id)
     .maybeSingle()
 
-  const isAdmin = viewerProfile?.role === 'admin'
+  const isAdmin = viewerProfile?.role === ROLES.ADMIN
   const isCourseInstructor = course.instructor_id === user.id
   const isCourseStaff = isCourseInstructor || isAdmin
   const canManageCourse = isCourseInstructor || isAdmin

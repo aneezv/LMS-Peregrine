@@ -4,6 +4,7 @@ import Image from 'next/image'
 import { BookOpen, Users } from 'lucide-react'
 import { EmptyState, PageHeader } from '@/components/ui/primitives'
 import { toRenderableImageUrl } from '@/lib/drive-image'
+import { ROLES, isInstructorRole } from '@/lib/roles'
 
 export default async function CoursesPage() {
   const supabase = await createClient()
@@ -13,8 +14,7 @@ export default async function CoursesPage() {
     ? await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
     : { data: null as { role: string } | null }
 
-  const seesAllCatalog =
-    viewerProfile?.role === 'instructor' || viewerProfile?.role === 'admin'
+  const seesAllCatalog = isInstructorRole(viewerProfile?.role)
 
   const catalogSelect = `
     id, course_code, title, description, thumbnail_url, enrollment_type, created_at,

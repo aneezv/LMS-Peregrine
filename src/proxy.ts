@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/middleware'
+import { ROLES, isInstructorRole } from '@/lib/roles'
 
 export async function proxy(request: NextRequest) {
   const { supabase, supabaseResponse } = createClient(request)
@@ -34,8 +35,8 @@ export async function proxy(request: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    const role = profile?.role ?? 'learner'
-    if (role !== 'instructor' && role !== 'admin') {
+    const role = profile?.role ?? ROLES.LEARNER
+    if (!isInstructorRole(role)) {
       const url = request.nextUrl.clone()
       url.pathname = '/unauthorized'
       return NextResponse.redirect(url)

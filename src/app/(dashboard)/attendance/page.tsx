@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import AttendanceClient, { type AttendanceCourseOption } from './AttendanceClient'
 import type { SessionModuleListItem } from './types'
 import { PageHeader } from '@/components/ui/primitives'
+import { ROLES, isInstructorRole } from '@/lib/roles'
 
 export default async function AttendancePage() {
   const supabase = await createClient()
@@ -12,13 +13,13 @@ export default async function AttendancePage() {
   if (!user) redirect('/login')
 
   const { data: profile } = await supabase.from('profiles').select('role, full_name').eq('id', user.id).single()
-  const role = profile?.role ?? 'learner'
-  if (role !== 'instructor' && role !== 'admin') {
+  const role = profile?.role ?? ROLES.LEARNER
+  if (!isInstructorRole(role)) {
     redirect('/unauthorized')
   }
 
   let coursesQuery = supabase.from('courses').select('id, title, course_code').order('title')
-  if (role !== 'admin') {
+  if (role !== ROLES.ADMIN) {
     coursesQuery = coursesQuery.eq('instructor_id', user.id)
   }
   const { data: courses } = await coursesQuery

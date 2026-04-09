@@ -2,6 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { ensureSessionRosterRows } from '@/lib/ensure-session-roster'
+import { ROLES, isInstructorRole } from '@/lib/roles'
 import type {
   AttendanceReportFetchInput,
   AttendanceReportRow,
@@ -72,12 +73,12 @@ export async function fetchAttendanceReport(input: AttendanceReportFetchInput): 
     .eq('id', user.id)
     .single()
 
-  const role = profile?.role ?? 'learner'
-  if (role !== 'instructor' && role !== 'admin') return { error: 'Forbidden' }
+  const role = profile?.role ?? ROLES.LEARNER
+  if (!isInstructorRole(role)) return { error: 'Forbidden' }
 
   // Determine courses user can report on.
   let coursesQuery = supabase.from('courses').select('id, title, course_code').order('title')
-  if (role !== 'admin') coursesQuery = coursesQuery.eq('instructor_id', user.id)
+  if (role !== ROLES.ADMIN) coursesQuery = coursesQuery.eq('instructor_id', user.id)
   const { data: allowedCourses, error: cErr } = await coursesQuery
   if (cErr) return { error: cErr.message }
 
@@ -302,8 +303,8 @@ export async function fetchAttendanceModuleDetail({
   if (!user) return { error: 'Not signed in' }
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  const role = profile?.role ?? 'learner'
-  if (role !== 'instructor' && role !== 'admin') return { error: 'Forbidden' }
+  const role = profile?.role ?? ROLES.LEARNER
+  if (!isInstructorRole(role)) return { error: 'Forbidden' }
 
   const { data: course, error: cErr } = await supabase
     .from('courses')
@@ -311,7 +312,7 @@ export async function fetchAttendanceModuleDetail({
     .eq('id', courseId)
     .single()
   if (cErr || !course) return { error: cErr?.message ?? 'Course not found' }
-  if (role !== 'admin' && course.instructor_id !== user.id) return { error: 'Forbidden' }
+  if (role !== ROLES.ADMIN && course.instructor_id !== user.id) return { error: 'Forbidden' }
 
   const { data: mod, error: mErr } = await supabase
     .from('modules')

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { uploadCourseThumbnailToDrive } from '@/utils/google-drive'
+import { ROLES, isInstructorRole } from '@/lib/roles'
 
 export const runtime = 'nodejs'
 
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
     }
 
     const role = profile?.role
-    if (role !== 'instructor' && role !== 'admin') {
+    if (!isInstructorRole(role)) {
       return NextResponse.json(
         { error: 'Only instructors or admins can upload course thumbnails.' },
         { status: 403 },

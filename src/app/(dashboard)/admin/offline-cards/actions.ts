@@ -2,6 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { normalizeOfflinePublicCode, OFFLINE_ID_CODE_RE } from '@/lib/offline-id-card'
+import { ROLES } from '@/lib/roles'
 
 const MAX_CODES = 5000
 const LOOKUP_CHUNK = 150
@@ -31,7 +32,7 @@ export async function importOfflineIdCards(input: {
   if (!user) return { ok: false, message: 'Not signed in.' }
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') {
+  if (profile?.role !== ROLES.ADMIN) {
     return { ok: false, message: 'Only administrators can import card codes.' }
   }
 

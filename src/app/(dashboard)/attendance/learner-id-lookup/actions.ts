@@ -5,6 +5,7 @@ import {
   normalizeOfflinePublicCode,
   OFFLINE_ID_CODE_RE,
 } from '@/lib/offline-id-card'
+import { ROLES, isInstructorRole } from '@/lib/roles'
 
 export type LearnerIdCourseInfo = {
   id: string
@@ -48,8 +49,8 @@ export async function lookupLearnerByIdCard(publicCode: string): Promise<LookupL
   }
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  const role = profile?.role ?? 'learner'
-  if (role !== 'instructor' && role !== 'admin') {
+  const role = profile?.role ?? ROLES.LEARNER
+  if (!isInstructorRole(role)) {
     return { ok: false, code: 'FORBIDDEN', message: 'You do not have access.' }
   }
 

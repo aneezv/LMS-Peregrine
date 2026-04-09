@@ -4,6 +4,7 @@ import ModuleSidebar from './ModuleSidebar'
 import ModulesDrawerShell from './ModulesDrawerShell'
 import { groupModulesByWeek } from '@/lib/course-modules'
 import { getLearnerModuleStatusMap } from '@/lib/learner-module-status'
+import { ROLES } from '@/lib/roles'
 
 export default async function ModulesLayout({
   children,
@@ -42,7 +43,7 @@ export default async function ModulesLayout({
     .maybeSingle()
 
   const isPreviewStaff =
-    course.instructor_id === user.id || viewerProfile?.role === 'admin'
+    course.instructor_id === user.id || viewerProfile?.role === ROLES.ADMIN
 
   const { data: modules } = await supabase
     .from('modules')

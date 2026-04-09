@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Users } from 'lucide-react'
 import EnrollmentsListClient, { type EnrollmentListItem } from '@/components/EnrollmentsListClient'
+import { ROLES } from '@/lib/roles'
 
 type EnrollmentRow = {
   id: string
@@ -42,7 +43,7 @@ export default async function CourseEnrollmentsPage({ params }: { params: Promis
     .eq('id', user.id)
     .maybeSingle()
 
-  const isAdmin = viewerProfile?.role === 'admin'
+  const isAdmin = viewerProfile?.role === ROLES.ADMIN
   const isCourseInstructor = course.instructor_id === user.id
   const isCourseStaff = isAdmin || isCourseInstructor
 

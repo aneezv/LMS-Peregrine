@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { NextResponse } from 'next/server'
 import { isUuid, requireUser } from '../_helpers'
 import { MAX_DAILY_ACTIVE_SECONDS } from '@/lib/internship/constants'
+import { ROLES, isInstructorRole } from '@/lib/roles'
 
 function parseDate(s: string | null, fallback: Date): Date {
   if (!s) return fallback
@@ -58,8 +59,8 @@ export async function GET(req: Request) {
     .eq('id', user.id)
     .single()
 
-  const role = profile?.role ?? 'learner'
-  if (role !== 'admin' && role !== 'instructor') {
+  const role = profile?.role ?? ROLES.LEARNER
+  if (!isInstructorRole(role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

@@ -11,6 +11,7 @@ import FeedbackSubmitClient from '@/components/FeedbackSubmitClient'
 import ExternalResourceLinks from '@/components/ExternalResourceLinks'
 import { ArrowRight, CalendarDays, CheckCircle2, Clock3, MapPin } from 'lucide-react'
 import NextLessonButton from './NextLessonButton'
+import { ROLES } from '@/lib/roles'
 
 function sortNested<T extends { sort_order?: number }>(arr: T[] | null | undefined): T[] {
   return [...(arr ?? [])].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
@@ -34,7 +35,7 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
     .eq('id', user.id)
     .maybeSingle()
 
-  const isAdmin = viewerProfile?.role === 'admin'
+  const isAdmin = viewerProfile?.role === ROLES.ADMIN
   const isCourseInstructor = courseRow?.instructor_id === user.id
   const isCourseStaff = isCourseInstructor || isAdmin
 

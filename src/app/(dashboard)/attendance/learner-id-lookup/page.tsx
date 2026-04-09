@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { AppCard, PageHeader } from '@/components/ui/primitives'
 import LearnerIdLookupClient from './LearnerIdLookupClient'
+import { ROLES, isInstructorRole } from '@/lib/roles'
 
 export default async function LearnerIdLookupPage() {
   const supabase = await createClient()
@@ -11,8 +12,8 @@ export default async function LearnerIdLookupPage() {
   if (!user) redirect('/login')
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  const role = profile?.role ?? 'learner'
-  if (role !== 'instructor' && role !== 'admin') {
+  const role = profile?.role ?? ROLES.LEARNER
+  if (!isInstructorRole(role)) {
     redirect('/unauthorized')
   }
 

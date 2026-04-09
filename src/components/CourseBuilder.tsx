@@ -45,6 +45,7 @@ import {
 import { syncQuizAndExternalForModule } from '@/lib/sync-module-quiz-external'
 import { parseQuizCsv } from '@/lib/parse-quiz-csv'
 import { toRenderableImageUrl } from '@/lib/drive-image'
+import { ROLES } from '@/lib/roles'
 
 type ModuleType =
   | 'video'
@@ -510,13 +511,13 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       if (!user || cancelled) return
       const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).single()
       if (cancelled) return
-      const admin = prof?.role === 'admin'
+      const admin = prof?.role === ROLES.ADMIN
       setIsAdmin(!!admin)
       if (admin) {
         const { data: people } = await supabase
           .from('profiles')
           .select('id, full_name, role')
-          .in('role', ['instructor', 'admin'])
+          .in('role', [ROLES.INSTRUCTOR, ROLES.ADMIN])
           .order('full_name')
         if (cancelled) return
         setInstructorChoices(people ?? [])
