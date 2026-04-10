@@ -178,6 +178,46 @@ async function updateProfileFullName(admin: SupabaseClient, profileId: string, f
   }
 }
 
+async function ensureProfileExists(admin: SupabaseClient, userId: string, fullName: string): Promise<void> {
+  // Check if profile already exists
+  const { data: existingProfile } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('id', userId)
+    .maybeSingle()
+  
+  if (existingProfile) {
+    // Profile exists, update full_name if provided
+    if (fullName) {
+      await updateProfileFullName(admin, userId, fullName)
+    }
+    return
+  }
+  
+  // Create profile for the user
+  const { error } = await admin
+    .from('profiles')
+    .insert({
+      id: userId,
+      full_name: fullName || null,
+      role: 'learner', // Default role for sheet-synced users
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+  
+  if (error) {
+    // Check if it's a duplicate key error (profile was created concurrently)
+    if (error.code === '23505' || error.message?.toLowerCase().includes('duplicate')) {
+      // Profile was created by another process, try to update full_name
+      if (fullName) {
+        await updateProfileFullName(admin, userId, fullName)
+      }
+      return
+    }
+    throw new Error(`Failed to create profile for user ${userId}: ${error.message}`)
+  }
+}
+
 async function adminCreateUser(
   admin: SupabaseClient,
   email: string,
@@ -225,7 +265,11 @@ async function ensureAuthUser(
   fullName: string,
 ): Promise<string> {
   const created = await adminCreateUser(admin, email, password, fullName)
-  if (created?.id) return created.id
+  if (created?.id) {
+    // Ensure profile is created for the new user
+    await ensureProfileExists(admin, created.id, fullName)
+    return created.id
+  }
 
   const existing = await findUserByEmail(admin, email)
   if (existing?.id) {
@@ -247,6 +291,15 @@ async function enrollLearner(admin: SupabaseClient, courseId: string, learnerId:
   if (error.code === '23505') return
   const msg = error.message || JSON.stringify(error)
   if (msg.toLowerCase().includes('duplicate') || msg.includes('409')) return
+  
+  // Provide more specific error messages for common issues
+  if (msg.includes('violates foreign key constraint') && msg.includes('learner_id')) {
+    throw new Error(`Learner profile not found for user ${learnerId}. User may not have a profile record.`)
+  }
+  if (msg.includes('violates foreign key constraint') && msg.includes('course_id')) {
+    throw new Error(`Course not found: ${courseId}`)
+  }
+  
   throw new Error(`enrollments: ${msg}`)
 }
 

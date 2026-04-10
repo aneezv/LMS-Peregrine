@@ -72,7 +72,8 @@ export type RunSheetSyncResult = {
 
 /** Rows that actually run Auth/DB work per HTTP request (idempotent skips do not count). */
 export function resolveMaxWorkRowsPerRun(): number {
-  const raw = process.env.SHEET_SYNC_MAX_WORK_ROWS
+  // const raw = process.env.SHEET_SYNC_MAX_WORK_ROWS
+  const raw = '50'
   const parsed = raw ? Number.parseInt(raw, 10) : 25
   if (!Number.isFinite(parsed) || parsed < 1) return 25
   return Math.min(parsed, 500)
