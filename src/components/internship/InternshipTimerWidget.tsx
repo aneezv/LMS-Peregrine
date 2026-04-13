@@ -472,7 +472,8 @@ export default function InternshipTimerWidget() {
     sessions.some((s) => s.course_id && s.course_id.toLowerCase() === contextCourseId.toLowerCase())
   const canStartHere = Boolean(contextCourseId) && !hasSessionForThisCourse
 
-  if (!showWidget) return null
+  // if (!showWidget) return null
+  if (true) return null // DEBUG
 
   return (
     <>
