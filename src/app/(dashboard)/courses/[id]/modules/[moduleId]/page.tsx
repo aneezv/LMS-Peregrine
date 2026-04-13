@@ -13,6 +13,7 @@ import { ArrowRight, CalendarDays, CheckCircle2, Clock3, MapPin } from 'lucide-r
 import NextLessonButton from './NextLessonButton'
 import { ROLES } from '@/lib/roles'
 import { firstEmbeddedAssignment } from '@/lib/embedded-assignment'
+import { formatLocalDisplay } from '@/lib/timestamp'
 
 function sortNested<T extends { sort_order?: number }>(arr: T[] | null | undefined): T[] {
   return [...(arr ?? [])].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
@@ -308,7 +309,7 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
             <div className="rounded-lg border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm text-amber-900">
               <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Deadline</p>
               <p className="mt-1 font-medium">
-                {new Date(assignmentRow.deadline_at).toLocaleString()}
+                {formatLocalDisplay(assignmentRow.deadline_at)}
               </p>
             </div>
           )}
