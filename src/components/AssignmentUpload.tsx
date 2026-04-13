@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { createClient } from '@/utils/supabase/client'
 import {
   MAX_FILE_BYTES,
@@ -36,6 +37,9 @@ type ApiSubmission = {
   passingScore: number | null
 } | null
 
+/** Long duration so small-phone / WebView users can read the real server or network message. */
+const UPLOAD_ISSUE_TOAST_MS = 18_000
+
 export default function AssignmentUpload({ assignmentId }: { assignmentId: string }) {
   const [loading, setLoading] = useState(true)
   const [submission, setSubmission] = useState<ApiSubmission>(null)
@@ -44,35 +48,61 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
   const [actionLoading, setActionLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
 
+  /** Inline banner + toast (toasts survive scroll and are obvious on Android Chrome / WebView). */
+  const reportIssue = useCallback((title: string, message: string) => {
+    setErrorMsg(message)
+    toast.error(title, {
+      description: message,
+      duration: UPLOAD_ISSUE_TOAST_MS,
+    })
+  }, [])
+
   const load = useCallback(async () => {
     setErrorMsg('')
-    const res = await fetch(
-      `/api/assignments/submission?assignmentId=${encodeURIComponent(assignmentId)}`,
-    )
-    const data = (await res.json()) as {
-      submission: ApiSubmission
-      files: {
-        id: string
-        file_url: string
-        original_name: string
-      }[]
-      error?: string
-    }
-    if (!res.ok) {
-      setErrorMsg(data.error ?? 'Could not load submission.')
+    try {
+      const res = await fetch(
+        `/api/assignments/submission?assignmentId=${encodeURIComponent(assignmentId)}`,
+      )
+      let data: {
+        submission: ApiSubmission
+        files: {
+          id: string
+          file_url: string
+          original_name: string
+        }[]
+        error?: string
+      }
+      try {
+        data = (await res.json()) as typeof data
+      } catch {
+        data = {} as typeof data
+      }
+      if (!res.ok) {
+        const msg =
+          data.error ??
+          `Could not load submission (HTTP ${res.status}). Check connection or try again.`
+        reportIssue('Assignment submission', msg)
+        setLoading(false)
+        return
+      }
+      setSubmission(data.submission)
+      setFiles(
+        (data.files ?? []).map((f) => ({
+          id: f.id,
+          file_url: f.file_url,
+          original_name: f.original_name,
+        })),
+      )
+    } catch (e) {
+      const msg =
+        e instanceof Error
+          ? e.message
+          : 'Network error loading submission. Try Wi-Fi or disable data saver.'
+      reportIssue('Assignment submission', msg)
+    } finally {
       setLoading(false)
-      return
     }
-    setSubmission(data.submission)
-    setFiles(
-      (data.files ?? []).map((f) => ({
-        id: f.id,
-        file_url: f.file_url,
-        original_name: f.original_name,
-      })),
-    )
-    setLoading(false)
-  }, [assignmentId])
+  }, [assignmentId, reportIssue])
 
   useEffect(() => {
     setLoading(true)
@@ -96,23 +126,31 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
-      setErrorMsg('You must be signed in.')
+      reportIssue('Assignment upload', 'You must be signed in.')
       return
     }
     if (files.length + list.length > MAX_FILES_PER_SUBMISSION) {
-      setErrorMsg(`You can attach up to ${MAX_FILES_PER_SUBMISSION} files.`)
+      reportIssue(
+        'Assignment upload',
+        `You can attach up to ${MAX_FILES_PER_SUBMISSION} files.`,
+      )
       return
     }
 
     for (const file of list) {
       if (file.size > MAX_FILE_BYTES) {
-        setErrorMsg(`"${file.name}" is too large (max ${Math.floor(MAX_FILE_BYTES / (1024 * 1024))} MB per file).`)
+        reportIssue(
+          'Assignment upload',
+          `"${file.name}" is too large (max ${Math.floor(MAX_FILE_BYTES / (1024 * 1024))} MB per file).`,
+        )
         return
       }
       const mime = file.type
       if (!isAllowedAssignmentMime(mime, file.name)) {
-        setErrorMsg(
-          `"${file.name}" is not an allowed type (PDF, Word, Excel, CSV, images, or MP4 video).`,
+        reportIssue(
+          'Assignment upload',
+          `"${file.name}" is not an allowed type (PDF, Word, Excel, CSV, images, or MP4 video).` +
+            (mime ? ` (device reported type: ${mime})` : ' (device reported no file type — try renaming to .pdf or use “Files” to pick the document).'),
         )
         return
       }
@@ -122,13 +160,28 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
     setErrorMsg('')
     try {
       for (const file of list) {
-        const formData = new FormData()
-        formData.set('file', file)
-        formData.set('assignmentId', assignmentId)
-        const res = await fetch('/api/assignments/upload', { method: 'POST', body: formData })
-        const payload = (await res.json().catch(() => ({}))) as { error?: string }
-        if (!res.ok) {
-          setErrorMsg(payload.error ?? 'Upload failed.')
+        try {
+          const formData = new FormData()
+          formData.set('file', file)
+          formData.set('assignmentId', assignmentId)
+          const res = await fetch('/api/assignments/upload', { method: 'POST', body: formData })
+          const payload = (await res.json().catch(() => ({}))) as { error?: string }
+          if (!res.ok) {
+            const msg =
+              payload.error ??
+              `Upload failed (HTTP ${res.status}). Check connection or try a smaller file.`
+            reportIssue('Assignment upload', `${file.name}: ${msg}`)
+            break
+          }
+        } catch (e) {
+          const detail =
+            e instanceof Error
+              ? `${e.name}: ${e.message}`
+              : 'Unknown error — often a network drop or browser blocking the request.'
+          reportIssue(
+            'Assignment upload',
+            `"${file.name}" could not be sent. ${detail}`,
+          )
           break
         }
       }
@@ -151,10 +204,14 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
       })
       const payload = (await res.json().catch(() => ({}))) as { error?: string }
       if (!res.ok) {
-        setErrorMsg(payload.error ?? 'Could not remove file.')
+        reportIssue('Assignment file', payload.error ?? 'Could not remove file.')
         return
       }
       await load()
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : 'Network error while removing file.'
+      reportIssue('Assignment file', msg)
     } finally {
       setActionLoading(false)
     }
@@ -171,10 +228,17 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
       })
       const payload = (await res.json().catch(() => ({}))) as { error?: string }
       if (!res.ok) {
-        setErrorMsg(payload.error ?? 'Could not turn in.')
+        reportIssue(
+          'Turn in',
+          payload.error ?? `Could not turn in (HTTP ${res.status}).`,
+        )
         return
       }
       await load()
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : 'Network error while turning in.'
+      reportIssue('Turn in', msg)
     } finally {
       setActionLoading(false)
     }
@@ -191,10 +255,17 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
       })
       const payload = (await res.json().catch(() => ({}))) as { error?: string }
       if (!res.ok) {
-        setErrorMsg(payload.error ?? 'Could not unsubmit.')
+        reportIssue(
+          'Unsubmit',
+          payload.error ?? `Could not unsubmit (HTTP ${res.status}).`,
+        )
         return
       }
       await load()
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : 'Network error while unsubmitting.'
+      reportIssue('Unsubmit', msg)
     } finally {
       setActionLoading(false)
     }
