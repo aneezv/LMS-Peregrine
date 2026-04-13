@@ -202,10 +202,31 @@ async function syncAssignmentForModule(
     allow_late: false,
     late_penalty_pct: 0,
   }
-  const { error } = await supabase
+  // Upsert on module_id needs a UNIQUE on module_id; use update-or-insert instead (see migration assignments_module_id_key).
+  const { data: existingRows, error: selErr } = await supabase
     .from('assignments')
-    .upsert(payload, { onConflict: 'module_id' })
-  if (error) throw error
+    .select('id')
+    .eq('module_id', moduleId)
+    .limit(1)
+  if (selErr) throw selErr
+  const existingId = existingRows?.[0]?.id
+  if (existingId) {
+    const { error } = await supabase
+      .from('assignments')
+      .update({
+        description: payload.description,
+        max_score: payload.max_score,
+        passing_score: payload.passing_score,
+        deadline_at: payload.deadline_at,
+        allow_late: payload.allow_late,
+        late_penalty_pct: payload.late_penalty_pct,
+      })
+      .eq('id', existingId)
+    if (error) throw error
+  } else {
+    const { error } = await supabase.from('assignments').insert(payload)
+    if (error) throw error
+  }
 }
 
 const makeModule = (weekIndex = 1): ModuleItem => ({
