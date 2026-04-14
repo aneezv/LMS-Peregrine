@@ -28,7 +28,7 @@ function GradingTable({ list, modifiedSubmissionIds, scores, feedback, handleSco
   return (
     <div 
       ref={parentRef} 
-      className="overflow-auto max-h-[600px] border-t border-slate-200"
+      className="overflow-auto max-h-[600px] min-h-[250px] border-t border-slate-200"
     >
       <div
         style={{
@@ -60,10 +60,10 @@ function GradingTable({ list, modifiedSubmissionIds, scores, feedback, handleSco
                 marginTop: '45px', // offset for sticky header
               }}
             >
-              <div className="flex-[2] p-3 font-medium text-slate-900 truncate">
+              <div className="flex-[2] p-3 font-medium text-sm text-slate-900 text-wrap">
                 {r.learnerName ?? r.learnerId.slice(0, 8)}
               </div>
-              <div className="flex-[2] p-3 text-slate-700 truncate">{r.moduleTitle}</div>
+              <div className="flex-[2] p-3 text-slate-700 text-sm text-wrap">{r.moduleTitle}</div>
               <div className="flex-1 p-3">
                 {r.gradedAt ? (
                   <span className="text-emerald-700 font-semibold inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs">
@@ -110,7 +110,7 @@ function GradingTable({ list, modifiedSubmissionIds, scores, feedback, handleSco
                     className="w-16 border border-slate-300 rounded-md px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500"
                     placeholder="0"
                   />
-                  <span className="text-slate-500 text-[10px]">/ {r.maxScore}</span>
+                  <span className="text-slate-500 font-bold text-xs">/ {r.maxScore}</span>
                 </div>
               </div>
               <div className="flex-[3] p-3">
