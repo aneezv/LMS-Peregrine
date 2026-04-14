@@ -180,13 +180,13 @@ export default async function DashboardPage() {
   // ── Instructor data ──────────────────────────────────────────
   let myCourses:
     | {
-        id: string
-        course_code: string
-        title: string
-        status: string
-        created_at: string
-        enrollments: { count: number }[]
-      }[]
+      id: string
+      course_code: string
+      title: string
+      status: string
+      created_at: string
+      enrollments: { count: number }[]
+    }[]
     | null = []
 
   if (isInstructor) {
@@ -284,9 +284,8 @@ export default async function DashboardPage() {
                           <em className="not-italic text-slate-500 font-normal mr-1.5">{c.course_code}</em>
                           {c.title}
                         </p>
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${
-                          c.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-                        }`}>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${c.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                          }`}>
                           {c.status}
                         </span>
                       </div>
@@ -373,24 +372,34 @@ export default async function DashboardPage() {
               <li key={a.assignmentId}>
                 <Link
                   href={`/courses/${a.courseId}/modules/${a.moduleId}`}
-                  className="px-6 py-4 flex items-center justify-between gap-4 hover:bg-slate-50 transition group"
+                  className="flex items-center gap-3 px-6 py-4 hover:bg-slate-50 transition group"
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <FileText className="w-4 h-4 text-amber-500 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-800 group-hover:text-blue-700 truncate">
-                        {a.moduleTitle}
-                      </p>
+                  {/* Icon */}
+                  <FileText className="w-4 h-4 text-amber-500 shrink-0" />
+
+                  {/* Middle: title + course + due date on mobile */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-wrap text-slate-800 group-hover:text-blue-700 truncate">
+                      {a.moduleTitle}
+                    </p>
                       <p className="text-xs text-slate-400 truncate">{a.courseTitle}</p>
+                    <div className="flex items-center justify-end mt-2">
+                      {/* Due date: visible only on mobile, right-aligned */}
+                      <span className="text-xs text-amber-600 font-medium flex items-center gap-1 whitespace-nowrap sm:hidden">
+                        <Clock className="w-3 h-3" />
+                        Due {formatLocalDisplay(a.deadlineAt, true)}
+                      </span>
                     </div>
                   </div>
-                  <span className="flex items-center gap-3 shrink-0">
-                    <span className="text-xs text-amber-600 font-medium flex items-center gap-1">
+
+                  {/* Right: due date on desktop + chevron */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="hidden sm:flex text-xs text-amber-600 font-medium items-center gap-1 whitespace-nowrap">
                       <Clock className="w-3 h-3" />
                       Due {formatLocalDisplay(a.deadlineAt, true)}
                     </span>
                     <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500" />
-                  </span>
+                  </div>
                 </Link>
               </li>
             ))}
