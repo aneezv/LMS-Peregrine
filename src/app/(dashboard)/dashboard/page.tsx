@@ -1,10 +1,15 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { BookOpen, FileText, Award, Clock, ChevronRight, PlusCircle, Pencil, ArrowRight } from 'lucide-react'
+import { BookOpen, FileText, Award, Clock, ChevronRight, PlusCircle, Pencil, ArrowRight, Badge } from 'lucide-react'
 import { AppButton, AppCard, EmptyState, PageHeader } from '@/components/ui/primitives'
 import { formatLocalDisplay } from '@/lib/timestamp'
 import { ROLES, isInstructorRole } from '@/lib/roles'
+import { toRenderableImageUrl } from '@/lib/drive-image'
+import { Card, CardContent } from '@/components/ui/card'
+import { Progress } from 'radix-ui'
+import { Button } from '@/components/ui/button'
+import ContinueLearning from './ContinueLearning'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -60,19 +65,52 @@ export default async function DashboardPage() {
   }
 
   // ── Learner data ─────────────────────────────────────────────
+  // Fetch enrollments with course + module count
   const { data: enrollments } = await supabase
     .from('enrollments')
     .select(`
-      enrolled_at,
-      courses (
-        id, course_code, title, description, status, thumbnail_url,
-        modules ( id )
-      )
-    `)
+    enrolled_at,
+    courses (
+      id, course_code, title, description, status, thumbnail_url,
+      modules ( id )
+    )
+  `)
     .eq('learner_id', user.id)
     .order('enrolled_at', { ascending: false })
 
-  const enrolledCourses = (enrollments ?? []).map((e: any) => e.courses).filter(Boolean)
+  // Fetch completed module IDs for this learner across all courses
+  const { data: completedModules } = await supabase
+    .from('module_progress')
+    .select('module_id')
+    .eq('learner_id', user.id)
+    .eq('is_completed', true)
+
+  const completedSet = new Set((completedModules ?? []).map((m: any) => m.module_id))
+
+  // Build enrolledCourses with real progress %
+  const enrolledCourses = (enrollments ?? [])
+    .map((e: any) => e.courses)
+    .filter(Boolean)
+    .map((course: any) => {
+      const totalModules: number = course.modules?.length ?? 0
+      const completedCount = (course.modules ?? []).filter(
+        (m: any) => completedSet.has(m.id)
+      ).length
+
+      const progress = totalModules > 0
+        ? Math.round((completedCount / totalModules) * 100)
+        : 0
+
+      return {
+        id: course.id,
+        course_code: course.course_code,
+        title: course.title,
+        thumbnail_url: course.thumbnail_url ?? null,
+        progress,         // 0–100, ready for <Progress value={progress} />
+        totalModules,
+        completedCount,
+      }
+    })
 
   type DueAssignment = {
     assignmentId: string
@@ -207,7 +245,7 @@ export default async function DashboardPage() {
     {
       label: isInstructor ? (isAdmin ? 'All Courses' : 'My Courses') : 'Enrolled Courses',
       value: isInstructor ? (myCourses?.length ?? 0) : enrolledCourses.length,
-      icon: <BookOpen className="w-5 h-5 text-blue-500" />,
+      icon: <BookOpen className="w-3 h-3 text-blue-500" />,
       bg: 'bg-blue-50',
     },
     {
@@ -215,19 +253,19 @@ export default async function DashboardPage() {
       value: isInstructor
         ? (myCourses ?? []).reduce((sum: number, c: any) => sum + (c.enrollments?.[0]?.count ?? 0), 0)
         : dueAssignments.length,
-      icon: <FileText className="w-5 h-5 text-amber-500" />,
+      icon: <FileText className="w-3 h-3 text-amber-500" />,
       bg: 'bg-amber-50',
     },
-    {
-      label: 'Certificates Earned',
-      value: certificates?.length ?? 0,
-      icon: <Award className="w-5 h-5 text-green-500" />,
-      bg: 'bg-green-50',
-    },
+    // {
+    //   label: 'Certificates Earned',
+    //   value: certificates?.length ?? 0,
+    //   icon: <Award className="w-3 h-3 text-green-500" />,
+    //   bg: 'bg-green-50',
+    // },
   ]
 
   return (
-    <div className="space-y-4 px-2 py-2">
+    <div className="space-y-4 px-2 py-4">
       <PageHeader
         title={`Welcome back, ${name}!`}
         // description={`${role} account`} ONLY IN DEV
@@ -241,14 +279,25 @@ export default async function DashboardPage() {
       />
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         {metrics.map((m) => (
-          <AppCard key={m.label} className="p-5 flex items-center gap-3">
-            <div className={`${m.bg} p-3 rounded-lg`}>{m.icon}</div>
+          <AppCard
+            key={m.label}
+            className="p-5 flex flex-row justify-between gap-4 rounded-2xl"
+          >
             <div>
-              <p className="text-sm text-slate-500 font-medium">{m.label}</p>
-              <p className="text-3xl font-bold text-slate-900 mt-0.5">{m.value}</p>
+              <p className="text-xs font-medium text-slate-600">{m.label}</p>
+              <p className="text-2xl font-bold text-slate-900 tracking-tight">{m.value}</p>
             </div>
+            <div className="flex justify-end items-start">
+              <div className={`${m.bg} p-2.5 rounded-lg shadow-inner`}>
+                {m.icon}
+              </div>
+              {/* Optional: Add a "trend" badge here if you have the data */}
+              {/* <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full">+12%</span> */}
+            </div>
+
+
           </AppCard>
         ))}
       </div>
@@ -309,97 +358,54 @@ export default async function DashboardPage() {
 
       {/* Learner: Enrolled Courses */}
       {!isInstructor && (
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-            <h3 className="font-semibold text-slate-900">Your Enrolled Courses</h3>
-            <Link href="/courses" className="text-sm text-blue-600 hover:underline">Browse all</Link>
-          </div>
-
-          {enrolledCourses.length === 0 ? (
-            <div className="p-6">
-              <EmptyState
-                title="No enrolled courses"
-                description="Browse the catalog to enroll and begin learning."
-                action={<Link href="/courses" className="text-sm font-medium text-blue-600 hover:underline">Browse courses</Link>}
-              />
-            </div>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {enrolledCourses.map((course: any) => (
-                <li key={course.id}>
-                  <Link
-                    href={`/courses/${course.id}`}
-                    className="flex flex-col gap-3 px-6 py-4 hover:bg-slate-50 transition group sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="bg-blue-50 p-2 rounded-lg shrink-0">
-                        <BookOpen className="w-4 h-4 text-blue-500" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-800 group-hover:text-blue-600 sm:truncate">
-                          {course.title}
-                        </p>
-                        <div className="mt-0.5 flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:gap-2">
-                          <em className="not-italic font-medium text-slate-600">{course.course_code}</em>
-                          <span className="hidden text-slate-300 sm:inline" aria-hidden>
-                            ·
-                          </span>
-                          <span className="text-slate-400 line-clamp-2 sm:line-clamp-1">
-                            {course.description ?? 'No description'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center flex-1 sm:ml-4 justify-end">
-                      <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500" />
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <ContinueLearning enrolledCourses={enrolledCourses} />
       )}
-
-      {/* Learner: assignments due (week unlocked, not turned in) */}
       {!isInstructor && dueAssignments.length > 0 && (
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100">
-            <h3 className="font-semibold text-slate-900">Assignments due</h3>
+          {/* Compact Header */}
+          <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <h3 className="font-bold text-slate-500 text-[10px] uppercase tracking-wider">Assignments due</h3>
+            <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">
+              {dueAssignments.length}
+            </span>
           </div>
-          <ul className="divide-y divide-slate-100">
+
+          <ul className="divide-y divide-slate-50">
             {dueAssignments.map((a) => (
               <li key={a.assignmentId}>
                 <Link
                   href={`/courses/${a.courseId}/modules/${a.moduleId}`}
-                  className="flex items-center gap-3 px-6 py-4 hover:bg-slate-50 transition group"
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors group"
                 >
-                  {/* Icon */}
-                  <FileText className="w-4 h-4 text-amber-500 shrink-0" />
+                  {/* Smaller, simpler icon */}
+                  <div className="h-8 w-8 rounded-md bg-slate-50 flex items-center justify-center shrink-0 group-hover:bg-amber-50 transition-colors">
+                    <FileText className="w-4 h-4 text-slate-400 group-hover:text-amber-600 transition-colors" />
+                  </div>
 
-                  {/* Middle: title + course + due date on mobile */}
+                  {/* Content Area */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-wrap text-slate-800 group-hover:text-blue-700 truncate">
-                      {a.moduleTitle}
-                    </p>
-                      <p className="text-xs text-slate-400 truncate">{a.courseTitle}</p>
-                    <div className="flex items-center justify-end mt-2">
-                      {/* Due date: visible only on mobile, right-aligned */}
-                      <span className="text-xs text-amber-600 font-medium flex items-center gap-1 whitespace-nowrap sm:hidden">
-                        <Clock className="w-3 h-3" />
-                        Due {formatLocalDisplay(a.deadlineAt, true)}
-                      </span>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-800 group-hover:text-blue-600 transition-colors truncate">
+                          {a.moduleTitle}
+                        </p>
+                        <p className="text-[11px] text-slate-400 truncate -mt-0.5">
+                          {a.courseTitle}
+                        </p>
+                      </div>
+
+                      {/* Ultra-compact Due Date */}
+                      <div className="flex items-center gap-1 mt-1 sm:mt-0">
+                        <Clock className="w-3 h-3 text-amber-500/70" />
+                        <span className="text-[11px] font-medium text-amber-600/90 whitespace-nowrap">
+                          {formatLocalDisplay(a.deadlineAt, true)}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Right: due date on desktop + chevron */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="hidden sm:flex text-xs text-amber-600 font-medium items-center gap-1 whitespace-nowrap">
-                      <Clock className="w-3 h-3" />
-                      Due {formatLocalDisplay(a.deadlineAt, true)}
-                    </span>
-                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500" />
-                  </div>
+                  {/* Micro Chevron */}
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-400 transition-transform group-hover:translate-x-0.5" />
                 </Link>
               </li>
             ))}
