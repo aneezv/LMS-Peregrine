@@ -11,24 +11,32 @@ UPDATE public.profiles
 SET role = 'instructor'
 WHERE id = (SELECT id FROM auth.users LIMIT 1);
 
--- Step 2: Create sample course
-INSERT INTO public.courses (id, instructor_id, title, description, status, enrollment_type)
+-- Step 2: Ensure General department exists
+INSERT INTO public.departments (name, sort_order)
+SELECT 'General', 0
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.departments d WHERE lower(trim(d.name)) = 'general'
+);
+
+-- Step 3: Create sample course
+INSERT INTO public.courses (id, instructor_id, department_id, title, description, status, enrollment_type)
 SELECT
   'a1b2c3d4-0000-0000-0000-000000000001'::uuid,
   p.id,
+  (SELECT id FROM public.departments WHERE lower(trim(name)) = 'general' LIMIT 1),
   'Introduction to Web Development',
   'Learn the fundamentals of web development including HTML, CSS, JavaScript, and modern frameworks. This course is perfect for beginners who want to start their journey in web development.',
   'published',
   'open'
 FROM public.profiles p LIMIT 1;
 
--- Step 3: Create sections
+-- Step 4: Create sections
 INSERT INTO public.sections (id, course_id, title, sort_order) VALUES
   ('b1000000-0000-0000-0000-000000000001'::uuid, 'a1b2c3d4-0000-0000-0000-000000000001'::uuid, 'Getting Started', 0),
   ('b1000000-0000-0000-0000-000000000002'::uuid, 'a1b2c3d4-0000-0000-0000-000000000001'::uuid, 'HTML Fundamentals', 1),
   ('b1000000-0000-0000-0000-000000000003'::uuid, 'a1b2c3d4-0000-0000-0000-000000000001'::uuid, 'CSS & Styling', 2);
 
--- Step 4: Create modules
+-- Step 5: Create modules
 INSERT INTO public.modules (id, course_id, section_id, type, title, content_url, sort_order, available_from, is_sequential) VALUES
   -- Section 1: Getting Started
   (
@@ -89,7 +97,7 @@ INSERT INTO public.modules (id, course_id, section_id, type, title, content_url,
     false
   );
 
--- Step 5: Create assignment config for the assignment module
+-- Step 6: Create assignment config for the assignment module
 INSERT INTO public.assignments (id, module_id, max_score, passing_score, deadline_at, allow_late, late_penalty_pct)
 VALUES (
   'd1000000-0000-0000-0000-000000000001'::uuid,
@@ -101,7 +109,7 @@ VALUES (
   10
 );
 
--- Step 6: Auto-enroll the first user (your account) in the course
+-- Step 7: Auto-enroll the first user (your account) in the course
 INSERT INTO public.enrollments (course_id, learner_id)
 SELECT 'a1b2c3d4-0000-0000-0000-000000000001'::uuid, p.id
 FROM public.profiles p LIMIT 1

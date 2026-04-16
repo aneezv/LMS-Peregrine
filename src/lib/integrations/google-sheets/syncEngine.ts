@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { User } from '@supabase/supabase-js'
+import { GENERAL_DEPARTMENT_NAME } from '@/lib/course-departments'
 
 export type SheetRowInput = {
   rowNumber: number
@@ -20,6 +21,25 @@ const LIST_USERS_MAX_PAGES = 12
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+let cachedGeneralDepartmentId: string | null = null
+
+async function getGeneralDepartmentId(admin: SupabaseClient): Promise<string> {
+  if (cachedGeneralDepartmentId) return cachedGeneralDepartmentId
+  const { data, error } = await admin
+    .from('departments')
+    .select('id')
+    .ilike('name', GENERAL_DEPARTMENT_NAME)
+    .limit(1)
+    .maybeSingle()
+  if (data?.id) {
+    cachedGeneralDepartmentId = data.id
+    return data.id
+  }
+  throw new Error(
+    `General department not found (required for sheet sync course create): ${error?.message ?? 'unknown'}`,
+  )
+}
 
 export function parseCourseRefs(raw: string): string[] {
   if (!raw) return []
@@ -133,6 +153,8 @@ async function ensureCourseByCode(admin: SupabaseClient, instructorId: string, c
   const existing = await findCourseIdByCode(admin, trimmed)
   if (existing) return existing
 
+  const departmentId = await getGeneralDepartmentId(admin)
+
   const { data: inserted, error } = await admin
     .from('courses')
     .insert({
@@ -142,6 +164,7 @@ async function ensureCourseByCode(admin: SupabaseClient, instructorId: string, c
       description: 'Auto-created from Google Sheet sync. Add modules in the LMS when ready.',
       status: 'draft',
       enrollment_type: 'invite_only',
+      department_id: departmentId,
     })
     .select('id')
     .single()

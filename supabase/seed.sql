@@ -36,10 +36,17 @@ UPDATE public.profiles
 SET role = 'instructor'
 WHERE id = (SELECT id FROM auth.users ORDER BY created_at ASC NULLS LAST LIMIT 1);
 
+INSERT INTO public.departments (name, sort_order)
+SELECT 'General', 0
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.departments d WHERE lower(trim(d.name)) = 'general'
+);
+
 -- Sample course (idempotent on primary key)
 INSERT INTO public.courses (
   id,
   instructor_id,
+  department_id,
   course_code,
   title,
   description,
@@ -49,6 +56,7 @@ INSERT INTO public.courses (
 SELECT
   'a1b2c3d4-0000-0000-0000-000000000001'::uuid,
   p.id,
+  (SELECT id FROM public.departments WHERE lower(trim(name)) = 'general' LIMIT 1),
   'WEB-DEV-101',
   'Introduction to Web Development',
   'Learn the fundamentals of web development including HTML, CSS, JavaScript, and modern frameworks. This course is perfect for beginners who want to start their journey in web development.',
@@ -59,6 +67,7 @@ ORDER BY p.created_at ASC NULLS LAST
 LIMIT 1
 ON CONFLICT (id) DO UPDATE SET
   instructor_id = excluded.instructor_id,
+  department_id = excluded.department_id,
   course_code = excluded.course_code,
   title = excluded.title,
   description = excluded.description,

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { createClient } from '@/utils/supabase/server'
+import { unwrapSingle } from '@/lib/catalog-courses'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { BookOpen, FileText, Clock, ChevronRight, PlusCircle, Pencil, ArrowRight, Flame } from 'lucide-react'
@@ -225,13 +226,14 @@ export default async function DashboardPage() {
       status: string
       created_at: string
       enrollments: { count: number }[]
+      department: { name: string } | null
     }[]
     | null = []
 
   if (isInstructor) {
     let staffCoursesQuery = supabase
       .from('courses')
-      .select('id, course_code, title, status, created_at, enrollments(count)')
+      .select('id, course_code, title, status, created_at, enrollments(count), department:department_id ( name )')
       .order('created_at', { ascending: false })
 
     if (!isAdmin) {
@@ -239,7 +241,26 @@ export default async function DashboardPage() {
     }
 
     const { data } = await staffCoursesQuery
-    myCourses = data
+    myCourses = (data ?? []).map((row) => {
+      const r = row as {
+        id: string
+        course_code: string
+        title: string
+        status: string
+        created_at: string
+        enrollments: { count: number }[]
+        department: { name: string } | { name: string }[] | null
+      }
+      return {
+        id: r.id,
+        course_code: r.course_code,
+        title: r.title,
+        status: r.status,
+        created_at: r.created_at,
+        enrollments: r.enrollments,
+        department: unwrapSingle(r.department),
+      }
+    })
   }
 
   type MetricCard = {
@@ -340,10 +361,15 @@ export default async function DashboardPage() {
                           <em className="not-italic text-slate-500 font-normal mr-1.5">{c.course_code}</em>
                           {c.title}
                         </p>
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${c.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-                          }`}>
-                          {c.status}
-                        </span>
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          {c.department?.name ? (
+                            <span className="text-[11px] text-slate-500">{c.department.name}</span>
+                          ) : null}
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${c.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                            }`}>
+                            {c.status}
+                          </span>
+                        </div>
                       </div>
                     </div>
                     <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500 shrink-0" />

@@ -26,6 +26,7 @@ import {
   type SyllabusWeek,
 } from '@/components/courses/course-syllabus-accordion'
 import { cn } from '@/lib/utils'
+import { unwrapSingle } from '@/lib/catalog-courses'
 
 export default async function CourseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -37,7 +38,8 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
     .from('courses')
     .select(`
       id, instructor_id, course_code, title, description, thumbnail_url, starts_at, enrollment_type,
-      profiles:instructor_id ( full_name )
+      profiles:instructor_id ( full_name ),
+      department:department_id ( id, name )
     `)
     .eq('id', id)
     .single()
@@ -121,6 +123,11 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
 
   const instructorName =
     (course.profiles as { full_name?: string } | null)?.full_name ?? 'Unknown'
+
+  const departmentName =
+    unwrapSingle(
+      course.department as { name?: string } | { name?: string }[] | null | undefined,
+    )?.name?.trim() ?? null
 
   const syllabusWeeks: SyllabusWeek[] = sectionGroups.map((section) => ({
     id: section.id,
@@ -243,6 +250,13 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
 
   const courseMetaSubtitle = (
     <p className="text-[13px] leading-snug text-muted-foreground sm:text-sm">
+      {departmentName ? (
+        <>
+          <Badge variant="secondary" className="mr-2 align-middle font-normal">
+            {departmentName}
+          </Badge>
+        </>
+      ) : null}
       <span className="font-medium text-foreground/90">{instructorName}</span>
       {totalModules > 0 && (
         <>

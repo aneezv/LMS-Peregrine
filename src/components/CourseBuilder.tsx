@@ -46,6 +46,7 @@ import { syncQuizAndExternalForModules } from '@/lib/sync-module-quiz-external'
 import { parseQuizCsv } from '@/lib/parse-quiz-csv'
 import { toRenderableImageUrl } from '@/lib/drive-image'
 import { ROLES } from '@/lib/roles'
+import { GENERAL_DEPARTMENT_NAME } from '@/lib/course-departments'
 import { toast } from 'sonner'
 import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog'
 import { firstEmbeddedAssignment } from '@/lib/embedded-assignment'
@@ -490,6 +491,10 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
   const [courseStartsAt, setCourseStartsAt] = useState('')
   const [thumbnailUrl, setThumbnailUrl] = useState('')
   const [enrollmentType, setEnrollmentType] = useState<'open' | 'invite_only'>('invite_only')
+  const [departmentOptions, setDepartmentOptions] = useState<
+    { id: string; name: string; sort_order: number }[]
+  >([])
+  const [departmentId, setDepartmentId] = useState('')
 
   const [modules, setModules] = useState<ModuleItem[]>([makeModule()])
   const [activeId, setActiveId] = useState<string>(modules[0]?.id ?? '')
@@ -544,11 +549,25 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         if (cancelled) return
         setInstructorChoices(people ?? [])
       }
+
+      const { data: deps } = await supabase
+        .from('departments')
+        .select('id, name, sort_order')
+        .order('sort_order', { ascending: true })
+        .order('name', { ascending: true })
+      if (cancelled || !deps?.length) return
+      setDepartmentOptions(deps)
+      if (!courseId) {
+        const gen = deps.find(
+          (d) => d.name.trim().toLowerCase() === GENERAL_DEPARTMENT_NAME.toLowerCase(),
+        )
+        setDepartmentId((prev) => prev || gen?.id || deps[0].id)
+      }
     })()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [courseId])
 
   useEffect(() => {
     if (!courseId) return
@@ -560,7 +579,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       const { data: course, error: cErr } = await supabase
         .from('courses')
         .select(
-          'title, course_code, description, thumbnail_url, starts_at, enrollment_type, status, instructor_id'
+          'title, course_code, description, thumbnail_url, starts_at, enrollment_type, status, instructor_id, department_id'
         )
         .eq('id', courseId)
         .single()
@@ -581,6 +600,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         course.starts_at ? toDatetimeLocalValue(course.starts_at as string) : ''
       )
       setEnrollmentType((course.enrollment_type as 'open' | 'invite_only') ?? 'invite_only')
+      setDepartmentId((course.department_id as string) ?? '')
 
       const { data: mods, error: mErr } = await supabase
         .from('modules')
@@ -620,6 +640,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           thumbnailUrl: course.thumbnail_url ?? '',
           enrollmentType: (course.enrollment_type as 'open' | 'invite_only') ?? 'invite_only',
           selectedInstructorId: (course.instructor_id as string) ?? '',
+          departmentId: (course.department_id as string) ?? '',
           modules: loadedModules,
         }),
       )
@@ -687,6 +708,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         thumbnailUrl,
         enrollmentType,
         selectedInstructorId,
+        departmentId,
         modules,
       }),
     [
@@ -697,6 +719,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       thumbnailUrl,
       enrollmentType,
       selectedInstructorId,
+      departmentId,
       modules,
     ],
   )
@@ -705,9 +728,10 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
 
   useEffect(() => {
     if (baselineReady || loading) return
+    if (!courseId && !departmentId) return
     setBaselineSnapshot(snapshot)
     setBaselineReady(true)
-  }, [baselineReady, loading, snapshot])
+  }, [baselineReady, loading, snapshot, courseId, departmentId])
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -971,6 +995,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
   const handleSave = async (publish: boolean) => {
     if (!title.trim()) { setError('Course title is required.'); return }
     if (!courseCode.trim()) { setError('Course code is required.'); return }
+    if (!departmentId) { setError('Department is required.'); return }
     setSaving(true)
     setError('')
     setActionError('')
@@ -996,6 +1021,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       thumbnailUrl,
       enrollmentType,
       selectedInstructorId,
+      departmentId,
     }
 
     try {
@@ -1010,6 +1036,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           starts_at: startsAtIso,
           status: publish ? 'published' : 'draft',
           enrollment_type: enrollmentType,
+          department_id: departmentId,
         }
         if (isAdmin && selectedInstructorId) {
           updatePayload.instructor_id = selectedInstructorId
@@ -1150,6 +1177,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           starts_at: startsAtIso,
           status: publish ? 'published' : 'draft',
           enrollment_type: enrollmentType,
+          department_id: departmentId,
         })
         .select('id')
         .single()
@@ -1230,6 +1258,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       setThumbnailUrl(backupState.thumbnailUrl)
       setEnrollmentType(backupState.enrollmentType)
       setSelectedInstructorId(backupState.selectedInstructorId)
+      setDepartmentId(backupState.departmentId)
       
     } finally {
       setSaving(false)
@@ -1342,6 +1371,26 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           <p className="text-xs text-slate-500 mt-1">
             Unique identifier for this course. Shown on the course page and catalog. Case-insensitive uniqueness.
           </p>
+        </div>
+
+        <div>
+          <Label>Department *</Label>
+          {departmentOptions.length > 0 ? (
+            <select
+              value={departmentId}
+              onChange={(e) => setDepartmentId(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {departmentOptions.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="text-sm text-slate-500">Loading departments…</p>
+          )}
+          <p className="text-xs text-slate-500 mt-1">Used to group this course in the catalog.</p>
         </div>
 
         <div>

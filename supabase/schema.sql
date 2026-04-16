@@ -1,7 +1,7 @@
 -- ============================================================
 -- Peregrine T&C – Full database schema (baseline + migrations)
 -- Source of truth: mirrors supabase/migrations/*.sql through
--- 20260404120000_coordinator_role.sql, 20260405120000_id_card_scan_attendance_rls.sql
+-- 20260416120100_learning_streak_ist.sql (includes departments + catalog indexes + IST streak)
 -- Use: Supabase SQL Editor for a greenfield project, or compare
 -- against `supabase db dump` / migration history.
 -- Then run supabase/seed.sql (see that file for production vs demo usage).
@@ -51,7 +51,23 @@ create trigger on_auth_user_created
   for each row execute function public.handle_new_user();
 
 -- ──────────────────────────────────────────────
--- 2. COURSES
+-- 2. DEPARTMENTS (course catalog grouping)
+-- ──────────────────────────────────────────────
+create table public.departments (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  sort_order  integer not null default 0,
+  created_at  timestamptz not null default now()
+);
+
+create unique index departments_name_lower_key
+  on public.departments (lower(trim(name)));
+
+create index departments_sort_order_idx
+  on public.departments (sort_order, name);
+
+-- ──────────────────────────────────────────────
+-- 3. COURSES
 -- ──────────────────────────────────────────────
 create type course_status as enum ('draft', 'published', 'archived');
 create type enrollment_type as enum ('open', 'invite_only');
@@ -59,6 +75,7 @@ create type enrollment_type as enum ('open', 'invite_only');
 create table public.courses (
   id                  uuid primary key default gen_random_uuid(),
   instructor_id       uuid not null references public.profiles(id),
+  department_id       uuid not null references public.departments(id),
   course_code         varchar(40) not null,
   title               varchar(200) not null,
   description         text,
@@ -71,6 +88,11 @@ create table public.courses (
 );
 
 create unique index courses_course_code_lower_key on public.courses (lower(trim(course_code)));
+
+create index courses_department_id_idx on public.courses (department_id);
+
+create index courses_catalog_list_idx
+  on public.courses (status, enrollment_type, department_id, created_at desc, id desc);
 
 -- ──────────────────────────────────────────────
 -- 3. SECTIONS
@@ -474,6 +496,7 @@ grant execute on function public.is_coordinator() to service_role;
 -- ──────────────────────────────────────────────
 
 alter table public.profiles enable row level security;
+alter table public.departments enable row level security;
 alter table public.courses enable row level security;
 alter table public.sections enable row level security;
 alter table public.modules enable row level security;
@@ -852,6 +875,32 @@ create policy "Admins select profiles" on public.profiles
 create policy "Users can update their own profile" on public.profiles
   for update using (auth.uid() = id);
 
+-- Departments: catalog taxonomy (read all; admin writes)
+create policy "Authenticated read departments" on public.departments
+  for select
+  to authenticated
+  using (true);
+
+create policy "Admins insert departments" on public.departments
+  for insert
+  to authenticated
+  with check (public.is_admin());
+
+create policy "Admins update departments" on public.departments
+  for update
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+create policy "Admins delete departments" on public.departments
+  for delete
+  to authenticated
+  using (public.is_admin());
+
+revoke all on public.departments from public;
+grant select on public.departments to authenticated;
+grant insert, update, delete on public.departments to authenticated;
+
 -- Courses: published visible to all authenticated users
 create policy "Published courses are visible to all" on public.courses
   for select using (status = 'published' or instructor_id = auth.uid());
@@ -1070,7 +1119,7 @@ select
   longest_streak,
   case
     when last_success_day is not null
-      and last_success_day >= ((timezone('UTC', now()))::date - 1)
+      and last_success_day >= ((timezone('Asia/Kolkata', now()))::date - 1)
     then current_streak
     else 0
   end as streak
