@@ -9,7 +9,7 @@ import QuizTakeClient, { type QuizQuestionPublic, type QuizResult } from '@/comp
 import { shuffleDeterministic } from '@/lib/shuffle-deterministic'
 import FeedbackSubmitClient from '@/components/FeedbackSubmitClient'
 import ExternalResourceLinks from '@/components/ExternalResourceLinks'
-import { ArrowRight, CalendarDays, CheckCircle2, Clock3, MapPin } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Clock3, MapPin } from 'lucide-react'
 import NextLessonButton from './NextLessonButton'
 import { ROLES } from '@/lib/roles'
 import { firstEmbeddedAssignment } from '@/lib/embedded-assignment'
@@ -262,7 +262,6 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
     }
   }
 
-  const canGoNext = !!nextModule && currentModuleComplete && !nextModule.locked
   const showNextButtonForType =
     mod.type !== 'assignment' &&
     mod.type !== 'live_session' &&
@@ -621,7 +620,7 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
             </div>
           )}
           {externalLinks.length > 0 ? (
-            <ExternalResourceLinks courseId={courseId} moduleId={moduleId} links={externalLinks} />
+            <ExternalResourceLinks moduleId={moduleId} links={externalLinks} />
           ) : (
             <p className="text-sm text-amber-700">No links have been added for this resource yet.</p>
           )}
@@ -631,6 +630,7 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
       {enrollment && !isCourseStaff && showNextButtonForType && (
         <NextLessonButton 
           courseId={courseId}
+          currentModuleId={moduleId}
           nextModule={nextModule}
           initialCompleted={currentModuleComplete}
           nextDisabledReason={nextDisabledReason}

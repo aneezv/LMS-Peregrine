@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { queryKeys } from '@/lib/query/query-keys'
+import { fetchWithRetry } from '@/lib/network-retry'
 
 export default function FeedbackSubmitClient({
   moduleId,
@@ -11,11 +13,31 @@ export default function FeedbackSubmitClient({
   moduleId: string
   submittedInitially: boolean
 }) {
-  const router = useRouter()
+  const queryClient = useQueryClient()
   const [body, setBody] = useState('')
   const [done, setDone] = useState(submittedInitially)
   const [error, setError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
+
+  const submitMutation = useMutation({
+    mutationFn: async (trimmedBody: string) => {
+      const res = await fetchWithRetry('/api/feedback/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ moduleId, body: trimmedBody }),
+      })
+      const data = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Submit failed')
+      return data
+    },
+    onSuccess: async () => {
+      setDone(true)
+      queryClient.setQueryData(queryKeys.moduleProgress({ moduleId }), { completed: true })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.feedbackStatus({ moduleId }) })
+    },
+    onError: (err) => {
+      setError(err instanceof Error ? err.message : 'Network error')
+    },
+  })
 
   if (done) {
     return (
@@ -32,25 +54,7 @@ export default function FeedbackSubmitClient({
       return
     }
     setError('')
-    setSubmitting(true)
-    try {
-      const res = await fetch('/api/feedback/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ moduleId, body: t }),
-      })
-      const data = (await res.json().catch(() => ({}))) as { error?: string }
-      if (!res.ok) {
-        setError(data.error ?? 'Submit failed')
-        return
-      }
-      setDone(true)
-      router.refresh()
-    } catch {
-      setError('Network error')
-    } finally {
-      setSubmitting(false)
-    }
+    await submitMutation.mutateAsync(t)
   }
 
   return (
@@ -67,10 +71,10 @@ export default function FeedbackSubmitClient({
       <button
         type="button"
         onClick={() => void submit()}
-        disabled={submitting}
+        disabled={submitMutation.isPending}
         className="inline-flex items-center gap-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-semibold py-2.5 px-6 rounded-lg transition"
       >
-        {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+        {submitMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
         Submit feedback
       </button>
     </div>

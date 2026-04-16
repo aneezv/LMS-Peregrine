@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import Image from 'next/image'
 import {
   DndContext,
   closestCenter,
@@ -484,6 +486,7 @@ function mapDbModuleToItem(
 
 export default function CourseBuilder({ courseId }: { courseId?: string }) {
   const router = useRouter()
+  const queryClient = useQueryClient()
 
   const [title, setTitle] = useState('')
   const [courseCode, setCourseCode] = useState('')
@@ -1052,8 +1055,14 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
 
         const { data: existingMods } = await supabase
           .from('modules')
-          .select('id')
+          .select('id, sort_order')
           .eq('course_id', courseId)
+        const sortOrderByModuleId = new Map<string, number>(
+          (existingMods ?? []).map((row) => [
+            row.id as string,
+            Number((row as { sort_order?: number }).sort_order ?? 0),
+          ]),
+        )
 
         // Delete modules that were explicitly removed
         if (deletedModuleIds.size > 0) {
@@ -1108,11 +1117,17 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
                 quizQuestions: mod.quiz_questions,
               })
             } else {
-              // Just update sort_order if it's not "dirty" but position might have changed
-              const { error: sErr } = await supabase.from('modules').update({ sort_order: i }).eq('id', mod.dbId)
-              if (sErr) {
-                logSaveFailure('module sort_order update', sErr)
-                throw new Error('Failed to update lesson order.')
+              // Update sort order only when it actually changed.
+              const prevSortOrder = sortOrderByModuleId.get(mod.dbId)
+              if (prevSortOrder == null || prevSortOrder !== i) {
+                const { error: sErr } = await supabase
+                  .from('modules')
+                  .update({ sort_order: i })
+                  .eq('id', mod.dbId)
+                if (sErr) {
+                  logSaveFailure('module sort_order update', sErr)
+                  throw new Error('Failed to update lesson order.')
+                }
               }
             }
             // Always sync assignment row for persisted modules (not only when modifiedModuleIds fired).
@@ -1281,8 +1296,8 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       return
     }
     toast.success('Course deleted.')
+    await queryClient.invalidateQueries({ queryKey: ['courses', 'catalog'] })
     router.push('/dashboard')
-    router.refresh()
   }
 
   if (courseId && loading) {
@@ -1420,9 +1435,11 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
             <Label>Thumbnail image URL</Label>
             {thumbnailUrl && (
               <div className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 hidden w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-xl group-hover:block group-focus-within:block">
-                <img
+                <Image
                   src={thumbnailPreviewSrc}
                   alt="Course thumbnail preview"
+                  width={224}
+                  height={128}
                   className="h-32 w-full rounded-lg object-cover"
                 />
                 <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-slate-500">

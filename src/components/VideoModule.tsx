@@ -1,9 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import './VideoModule.plyr.css'
-import { createClient } from '@/utils/supabase/client'
-import { useRouter } from 'next/navigation'
+import { fetchWithRetry } from '@/lib/network-retry'
+import { queryKeys } from '@/lib/query/query-keys'
 
 const END_SECONDS_THRESHOLD = 10
 const VEIL_FADE_OUT_MS = 480
@@ -35,33 +37,61 @@ function isProbablyDirectVideo(url: string): boolean {
   return /\.(mp4|webm|ogg)(\?|$)/i.test(url.trim())
 }
 
-async function markVideoCompleteOnce(moduleId: string, doneRef: { current: boolean }) {
-  if (doneRef.current) return
-  const supabase = createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return
-  doneRef.current = true
-  const { error } = await supabase.from('module_progress').upsert(
-    {
-      module_id: moduleId,
-      learner_id: user.id,
-      watch_pct: 100,
-      is_completed: true,
-      completed_at: new Date().toISOString(),
-    },
-    { onConflict: 'module_id,learner_id' },
-  );
+type SupportedOrientationLock = 'any' | 'natural' | 'landscape' | 'portrait' | 'portrait-primary' | 'portrait-secondary' | 'landscape-primary' | 'landscape-secondary'
 
-  if (error) {
-    console.error("Supabase Error:", error);
-    doneRef.current = false;
+type ScreenOrientationWithLock = ScreenOrientation & {
+  lock?: (orientation: SupportedOrientationLock) => Promise<void>
+  unlock?: () => void
+}
+
+function getScreenOrientation(): ScreenOrientationWithLock | null {
+  if (typeof window === 'undefined' || !('screen' in window)) return null
+  return window.screen.orientation as ScreenOrientationWithLock | null
+}
+
+async function requestLandscapeOrientation() {
+  const orientation = getScreenOrientation()
+  if (!orientation?.lock) return
+  try {
+    await orientation.lock('landscape')
+  } catch {
+    // Some browsers require fullscreen to settle before locking orientation.
+  }
+}
+
+function resetOrientationLock() {
+  const orientation = getScreenOrientation()
+  if (!orientation?.unlock) return
+  try {
+    orientation.unlock()
+  } catch {
+    // Ignore browsers that do not support orientation unlock.
+  }
+}
+
+async function markVideoCompleteOnce(moduleId: string, doneRef: { current: boolean }): Promise<boolean> {
+  if (doneRef.current) return true
+  doneRef.current = true
+  try {
+    const res = await fetchWithRetry('/api/modules/complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ moduleId }),
+    })
+    const data = (await res.json().catch(() => ({}))) as { error?: string }
+    if (!res.ok) {
+      throw new Error(data.error ?? 'Could not save lesson completion')
+    }
+    return true
+  } catch (error) {
+    console.error('Lesson completion error:', error)
+    doneRef.current = false
+    return false
   }
 }
 
 export default function VideoModule({ moduleId, contentUrl }: VideoModuleProps) {
-  const router = useRouter()
+  const queryClient = useQueryClient()
   const embedRef = useRef<HTMLDivElement>(null)
   const ytId = extractYouTubeId(contentUrl)
   const vimeoId = !ytId ? extractVimeoId(contentUrl) : null
@@ -108,13 +138,18 @@ export default function VideoModule({ moduleId, contentUrl }: VideoModuleProps) 
 
   const onReachEnd = useCallback(() => {
     const run = async () => {
-      await markVideoCompleteOnce(moduleId, doneRef)
-      // BROADCAST COMPLETION TO OTHER COMPONENTS
-      window.dispatchEvent(new Event('module-completed'))
-      router.refresh()
+      const completed = await markVideoCompleteOnce(moduleId, doneRef)
+      if (completed) {
+        queryClient.setQueryData(queryKeys.moduleProgress({ moduleId }), { completed: true })
+      } else {
+        toast.error('Could not save lesson completion', {
+          description:
+            'Check your connection and try again. We will retry the next time the lesson completion event fires.',
+        })
+      }
     }
     void run()
-  }, [moduleId, router])
+  }, [moduleId, queryClient])
 
   useEffect(() => {
     if (!provider || !embedId || !embedRef.current) return
@@ -193,6 +228,14 @@ export default function VideoModule({ moduleId, contentUrl }: VideoModuleProps) 
       player.on('stalled', () => { if (!cancelled) setWaiting(true) })
       player.on('canplay', () => { if (!cancelled) setWaiting(false) })
       player.on('canplaythrough', () => { if (!cancelled) setWaiting(false) })
+      player.on('enterfullscreen', () => {
+        if (cancelled) return
+        void requestLandscapeOrientation()
+      })
+      player.on('exitfullscreen', () => {
+        if (cancelled) return
+        resetOrientationLock()
+      })
       player.on('error', () => {
         if (cancelled) return
         const c = player.elements?.container as HTMLElement | null
@@ -226,6 +269,7 @@ export default function VideoModule({ moduleId, contentUrl }: VideoModuleProps) 
       if (player) {
         try { player.destroy() } catch { /* noop */ }
       }
+      resetOrientationLock()
       setEmbedReady(false)
       setPaused(true)
       setEnded(false)

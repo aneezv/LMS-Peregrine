@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Loader2, Pencil, Trash2, MessageSquareText, Users } from 'lucide-react'
@@ -10,6 +11,7 @@ import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog'
 
 export default function CourseManageBar({ courseId }: { courseId: string }) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [deleting, setDeleting] = useState(false)
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
 
@@ -24,8 +26,8 @@ export default function CourseManageBar({ courseId }: { courseId: string }) {
       return
     }
     toast.success('Course deleted.')
+    await queryClient.invalidateQueries({ queryKey: ['courses', 'catalog'] })
     router.push('/dashboard')
-    router.refresh()
   }
 
   return (

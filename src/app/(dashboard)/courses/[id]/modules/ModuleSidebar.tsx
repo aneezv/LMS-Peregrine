@@ -1,6 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
+import { useQueries } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import {
@@ -20,6 +21,7 @@ import {
   CheckCircle,
 } from 'lucide-react'
 import type { ModuleUiStatus } from '@/lib/learner-module-status'
+import { queryKeys } from '@/lib/query/query-keys'
 
 /** Matches modules grouped by week in modules/layout.tsx */
 export type SidebarModule = {
@@ -68,10 +70,25 @@ export default function ModuleSidebar({
   const navId = useId()
 
   const allMods = sectionGroups.flatMap((s) => s.mods)
+  const moduleProgressQueries = useQueries({
+    queries: allMods.map((mod) => ({
+      queryKey: queryKeys.moduleProgress({ moduleId: mod.id }),
+      queryFn: async () => ({ completed: false }),
+      enabled: false,
+      initialData: { completed: !!moduleUi?.[mod.id]?.complete },
+      staleTime: Infinity,
+    })),
+  })
+  const progressCompletedById = new Map<string, boolean>(
+    allMods.map((mod, idx) => [mod.id, Boolean(moduleProgressQueries[idx]?.data?.completed)]),
+  )
   const totalModules = allMods.length
   const completedModules =
-    isEnrolled && moduleUi
-      ? allMods.reduce((acc, m) => acc + (moduleUi[m.id]?.complete ? 1 : 0), 0)
+    isEnrolled
+      ? allMods.reduce(
+          (acc, m) => acc + (progressCompletedById.get(m.id) || moduleUi?.[m.id]?.complete ? 1 : 0),
+          0,
+        )
       : 0
   const completionPct =
     totalModules > 0 ? Math.round((completedModules * 100) / totalModules) : 0
@@ -215,6 +232,7 @@ export default function ModuleSidebar({
                       }
 
                       const ui = moduleUi?.[mod.id]
+                      const isComplete = progressCompletedById.get(mod.id) || ui?.complete
 
                       return (
                         <li key={mod.id}>
@@ -231,7 +249,7 @@ export default function ModuleSidebar({
                             <span className={`flex-1 truncate ${isActive ? 'font-semibold' : 'font-medium'}`}>
                               {mod.title}
                             </span>
-                            {ui?.complete && (
+                            {isComplete && (
                               <span
                                 className="shrink-0 text-emerald-600"
                                 title="Completed"

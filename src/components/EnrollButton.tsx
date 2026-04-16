@@ -1,13 +1,13 @@
 'use client'
 
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/utils/supabase/client'
-import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 
 export default function EnrollButton({ courseId }: { courseId: string }) {
   const [loading, setLoading] = useState(false)
-  const router = useRouter()
+  const queryClient = useQueryClient()
 
   const handleEnroll = async () => {
     setLoading(true)
@@ -21,7 +21,7 @@ export default function EnrollButton({ courseId }: { courseId: string }) {
     })
 
     setLoading(false)
-    router.refresh()
+    await queryClient.invalidateQueries({ queryKey: ['courses', 'catalog'] })
   }
 
   return (

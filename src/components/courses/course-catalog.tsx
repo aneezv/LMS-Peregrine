@@ -2,15 +2,14 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useMemo, useState, useTransition } from 'react'
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useRouter } from 'next/navigation'
 import { BookOpen, ChevronRight, Search, Users } from 'lucide-react'
 import { EmptyState } from '@/components/ui/primitives'
 import { toRenderableImageUrl } from '@/lib/drive-image'
-import {
-  CATALOG_PAGE_SIZE,
-  type CatalogCourse,
-  type CatalogDepartment,
-} from '@/lib/catalog-courses'
+import { CATALOG_PAGE_SIZE, type CatalogCourse, type CatalogDepartment } from '@/lib/catalog-courses'
+import { queryKeys } from '@/lib/query/query-keys'
 
 export type { CatalogCourse, CatalogDepartment } from '@/lib/catalog-courses'
 
@@ -117,14 +116,46 @@ export function CourseCatalog({
   departmentId: string
   fetchError: string | null
 }) {
-  const [courses, setCourses] = useState(initialCourses)
-  const [totalCount, setTotalCount] = useState(initialTotalCount)
-  const [page, setPage] = useState(initialPage)
-  const [q, setQ] = useState(initialQ)
-  const [departmentId, setDepartmentId] = useState(initialDepartmentId)
-  const [fetchError, setFetchError] = useState<string | null>(initialFetchError)
-  const [pending, startTransition] = useTransition()
+  const router = useRouter()
+  const [draftQ, setDraftQ] = useState(initialQ)
+  const [draftDepartmentId, setDraftDepartmentId] = useState(initialDepartmentId)
 
+  const params = useMemo(
+    () => ({ q: initialQ.trim(), dept: initialDepartmentId.trim(), page: initialPage }),
+    [initialDepartmentId, initialPage, initialQ],
+  )
+  const catalogQuery = useQuery({
+    queryKey: queryKeys.coursesCatalog(params),
+    queryFn: async () => {
+      const urlParams = new URLSearchParams()
+      if (params.q) urlParams.set('q', params.q)
+      if (params.dept) urlParams.set('dept', params.dept)
+      if (params.page > 1) urlParams.set('page', String(params.page))
+      const qs = urlParams.toString()
+      const url = qs ? `/api/courses/catalog?${qs}` : '/api/courses/catalog'
+      const res = await fetch(url, { cache: 'no-store' })
+      const json = (await res.json()) as {
+        courses?: CatalogCourse[]
+        totalCount?: number
+        error?: string
+      }
+      if (!res.ok) throw new Error(json.error || 'Failed to load course catalog.')
+      return {
+        courses: json.courses ?? [],
+        totalCount: json.totalCount ?? 0,
+      }
+    },
+    initialData: {
+      courses: initialCourses,
+      totalCount: initialTotalCount,
+    },
+  })
+
+  const courses = useMemo(() => catalogQuery.data?.courses ?? [], [catalogQuery.data?.courses])
+  const totalCount = catalogQuery.data?.totalCount ?? 0
+  const page = initialPage
+  const fetchError = catalogQuery.error instanceof Error ? catalogQuery.error.message : initialFetchError
+  const pending = catalogQuery.isFetching
   const sections = useMemo(() => groupCatalogByDepartment(courses), [courses])
   const from = totalCount === 0 ? 0 : (page - 1) * CATALOG_PAGE_SIZE + 1
   const to = Math.min(page * CATALOG_PAGE_SIZE, totalCount)
@@ -132,45 +163,21 @@ export function CourseCatalog({
   const countLabel =
     totalCount === 1 ? '1 course matches' : `${totalCount} courses match`
 
+  function navigate(nextPage: number, nextQuery: string, nextDept: string) {
+    const params = new URLSearchParams()
+    if (nextQuery.trim()) params.set('q', nextQuery.trim())
+    if (nextDept.trim()) params.set('dept', nextDept.trim())
+    if (nextPage > 1) params.set('page', String(nextPage))
+    const query = params.toString()
+    router.push(query ? `/courses?${query}` : '/courses')
+  }
+
   if (fetchError) {
     return (
       <div className="rounded-xl border border-red-200 bg-red-50/80 p-6 text-sm text-red-800">
         {fetchError}
       </div>
     )
-  }
-
-  async function loadPage(nextPage: number, nextQuery: string, nextDept: string) {
-    startTransition(async () => {
-      setFetchError(null)
-      const params = new URLSearchParams()
-      if (nextQuery.trim()) params.set('q', nextQuery.trim())
-      if (nextDept.trim()) params.set('dept', nextDept.trim())
-      if (nextPage > 1) params.set('page', String(nextPage))
-      const query = params.toString()
-      const url = query ? `/api/courses/catalog?${query}` : '/api/courses/catalog'
-      const pageUrl = query ? `/courses?${query}` : '/courses'
-
-      try {
-        const res = await fetch(url, { cache: 'no-store' })
-        const json = (await res.json()) as {
-          courses?: CatalogCourse[]
-          totalCount?: number
-          error?: string
-        }
-        if (!res.ok) {
-          throw new Error(json.error || 'Failed to load course catalog.')
-        }
-        setCourses(json.courses ?? [])
-        setTotalCount(json.totalCount ?? 0)
-        setPage(nextPage)
-        setQ(nextQuery)
-        setDepartmentId(nextDept)
-        window.history.replaceState(null, '', pageUrl)
-      } catch (err) {
-        setFetchError(err instanceof Error ? err.message : 'Failed to load course catalog.')
-      }
-    })
   }
 
   return (
@@ -191,7 +198,7 @@ export function CourseCatalog({
             className="flex w-full flex-col gap-3 sm:flex-row sm:items-end lg:max-w-xl"
             onSubmit={(e) => {
               e.preventDefault()
-              loadPage(1, q, departmentId)
+              navigate(1, draftQ, draftDepartmentId)
             }}
           >
             <div className="min-w-0 flex-1">
@@ -209,8 +216,8 @@ export function CourseCatalog({
                   inputMode="search"
                   autoComplete="off"
                   placeholder="Title, code, description…"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
+                  value={draftQ}
+                  onChange={(e) => setDraftQ(e.target.value)}
                   className="min-h-11 w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 shadow-inner placeholder:text-slate-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                 />
               </div>
@@ -221,8 +228,8 @@ export function CourseCatalog({
               </label>
               <select
                 id="course-catalog-dept"
-                value={departmentId}
-                onChange={(e) => setDepartmentId(e.target.value)}
+                value={draftDepartmentId}
+                onChange={(e) => setDraftDepartmentId(e.target.value)}
                 className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
               >
                 <option value="">All departments</option>
@@ -240,12 +247,24 @@ export function CourseCatalog({
             >
               {pending ? 'Applying…' : 'Apply'}
             </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                setDraftQ('')
+                setDraftDepartmentId('')
+                navigate(1, '', '')
+              }}
+              className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              Clear
+            </button>
           </form>
         </div>
       </section>
 
       {totalCount === 0 ? (
-        q.trim() || departmentId ? (
+        initialQ.trim() || initialDepartmentId ? (
           <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
             <h3 className="text-base font-semibold text-slate-800 sm:text-lg">No matches</h3>
             <p className="mt-1 text-sm text-slate-500">
@@ -253,7 +272,11 @@ export function CourseCatalog({
             </p>
             <button
               type="button"
-              onClick={() => loadPage(1, '', '')}
+              onClick={() => {
+                setDraftQ('')
+                setDraftDepartmentId('')
+                navigate(1, '', '')
+              }}
               className="mt-4 inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
             >
               Clear filters
@@ -299,7 +322,7 @@ export function CourseCatalog({
               {page > 1 ? (
                 <button
                   type="button"
-                  onClick={() => loadPage(page - 1, q, departmentId)}
+                  onClick={() => navigate(page - 1, initialQ, initialDepartmentId)}
                   disabled={pending}
                   className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
                 >
@@ -309,7 +332,7 @@ export function CourseCatalog({
               {hasMore ? (
                 <button
                   type="button"
-                  onClick={() => loadPage(page + 1, q, departmentId)}
+                  onClick={() => navigate(page + 1, initialQ, initialDepartmentId)}
                   disabled={pending}
                   className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
                 >

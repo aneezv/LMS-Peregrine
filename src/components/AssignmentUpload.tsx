@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { createClient } from '@/utils/supabase/client'
 import {
@@ -18,12 +19,8 @@ import {
   Undo2,
   Trash2,
 } from 'lucide-react'
-
-type ApiFile = {
-  id: string
-  file_url: string
-  original_name: string
-}
+import { queryKeys } from '@/lib/query/query-keys'
+import { fetchWithRetry } from '@/lib/network-retry'
 
 type ApiSubmission = {
   id: string
@@ -44,9 +41,7 @@ const ANDROID_WARN_BYTES = 50 * 1024 * 1024 // 50 MB
 const UPLOAD_ISSUE_TOAST_MS = 18_000
 
 export default function AssignmentUpload({ assignmentId }: { assignmentId: string }) {
-  const [loading, setLoading] = useState(true)
-  const [submission, setSubmission] = useState<ApiSubmission>(null)
-  const [files, setFiles] = useState<ApiFile[]>([])
+  const queryClient = useQueryClient()
   const [uploading, setUploading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
@@ -60,57 +55,54 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
     })
   }, [])
 
-  const load = useCallback(async () => {
+  const loadSubmission = useCallback(async () => {
     setErrorMsg('')
-    try {
-      const res = await fetch(
-        `/api/assignments/submission?assignmentId=${encodeURIComponent(assignmentId)}`,
-      )
-      let data: {
-        submission: ApiSubmission
-        files: {
-          id: string
-          file_url: string
-          original_name: string
-        }[]
-        error?: string
-      }
-      try {
-        data = (await res.json()) as typeof data
-      } catch {
-        data = {} as typeof data
-      }
-      if (!res.ok) {
-        const msg =
-          data.error ??
-          `Could not load submission (HTTP ${res.status}). Check connection or try again.`
-        reportIssue('Assignment submission', msg)
-        setLoading(false)
-        return
-      }
-      setSubmission(data.submission)
-      setFiles(
-        (data.files ?? []).map((f) => ({
-          id: f.id,
-          file_url: f.file_url,
-          original_name: f.original_name,
-        })),
-      )
-    } catch (e) {
-      const msg =
-        e instanceof Error
-          ? e.message
-          : 'Network error loading submission. Try Wi-Fi or disable data saver.'
-      reportIssue('Assignment submission', msg)
-    } finally {
-      setLoading(false)
+    const res = await fetchWithRetry(
+      `/api/assignments/submission?assignmentId=${encodeURIComponent(assignmentId)}`,
+    )
+    const data = (await res.json().catch(() => ({}))) as {
+      submission: ApiSubmission
+      files: {
+        id: string
+        file_url: string
+        original_name: string
+      }[]
+      error?: string
     }
-  }, [assignmentId, reportIssue])
+    if (!res.ok) {
+      throw new Error(
+        data.error ??
+          `Could not load submission (HTTP ${res.status}). Check connection or try again.`,
+      )
+    }
+    return {
+      submission: data.submission,
+      files: (data.files ?? []).map((f) => ({
+        id: f.id,
+        file_url: f.file_url,
+        original_name: f.original_name,
+      })),
+    }
+  }, [assignmentId])
+
+  const submissionQuery = useQuery({
+    queryKey: queryKeys.assignmentSubmission({ assignmentId }),
+    queryFn: loadSubmission,
+    staleTime: 0,
+    refetchOnMount: 'always',
+  })
 
   useEffect(() => {
-    setLoading(true)
-    void load()
-  }, [load])
+    if (!submissionQuery.error) return
+    const msg =
+      submissionQuery.error instanceof Error
+        ? submissionQuery.error.message
+        : 'Network error loading submission. Try Wi-Fi or disable data saver.'
+    reportIssue('Assignment submission', msg)
+  }, [reportIssue, submissionQuery.error])
+
+  const submission = submissionQuery.data?.submission ?? null
+  const files = submissionQuery.data?.files ?? []
 
   const graded = !!submission?.gradedAt
   const turnedIn = !!submission?.isTurnedIn
@@ -167,7 +159,7 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
   
       for (const file of picked) {
         // Stream the file directly — avoids loading entire file into JS heap (fixes Android OOM)
-        const res = await fetch(
+        const res = await fetchWithRetry(
           `/api/assignments/upload?assignmentId=${encodeURIComponent(assignmentId)}&fileName=${encodeURIComponent(file.name)}&mimeType=${encodeURIComponent(file.type || '')}`,
           {
             method: 'POST',
@@ -185,7 +177,7 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
         }
       }
   
-      await load()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.assignmentSubmission({ assignmentId }) })
   
     } catch (e) {
       const detail = e instanceof Error ? `${e.name}: ${e.message}` : 'Unknown error — check your connection and try again.'
@@ -203,7 +195,7 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
         fileId === 'legacy'
           ? `?assignmentId=${encodeURIComponent(assignmentId)}`
           : ''
-      const res = await fetch(`/api/assignments/files/${encodeURIComponent(fileId)}${q}`, {
+      const res = await fetchWithRetry(`/api/assignments/files/${encodeURIComponent(fileId)}${q}`, {
         method: 'DELETE',
       })
       const payload = (await res.json().catch(() => ({}))) as { error?: string }
@@ -211,7 +203,7 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
         reportIssue('Assignment file', payload.error ?? 'Could not remove file.')
         return
       }
-      await load()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.assignmentSubmission({ assignmentId }) })
     } catch (e) {
       const msg =
         e instanceof Error ? e.message : 'Network error while removing file.'
@@ -225,7 +217,7 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
     setActionLoading(true)
     setErrorMsg('')
     try {
-      const res = await fetch('/api/assignments/turn-in', {
+      const res = await fetchWithRetry('/api/assignments/turn-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assignmentId }),
@@ -238,7 +230,7 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
         )
         return
       }
-      await load()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.assignmentSubmission({ assignmentId }) })
     } catch (e) {
       const msg =
         e instanceof Error ? e.message : 'Network error while turning in.'
@@ -252,7 +244,7 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
     setActionLoading(true)
     setErrorMsg('')
     try {
-      const res = await fetch('/api/assignments/unsubmit', {
+      const res = await fetchWithRetry('/api/assignments/unsubmit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assignmentId }),
@@ -265,7 +257,7 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
         )
         return
       }
-      await load()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.assignmentSubmission({ assignmentId }) })
     } catch (e) {
       const msg =
         e instanceof Error ? e.message : 'Network error while unsubmitting.'
@@ -275,7 +267,7 @@ export default function AssignmentUpload({ assignmentId }: { assignmentId: strin
     }
   }
 
-  if (loading) {
+  if (submissionQuery.isLoading) {
     return (
       <div className="flex items-center gap-2 text-slate-500 py-8 justify-center">
         <Loader2 className="h-5 w-5 animate-spin" />

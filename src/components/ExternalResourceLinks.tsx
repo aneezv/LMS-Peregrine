@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { ExternalLink } from 'lucide-react'
-import { createClient } from '@/utils/supabase/client'
-import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import { fetchWithRetry } from '@/lib/network-retry'
+import { queryKeys } from '@/lib/query/query-keys'
 
 type ExternalResourceLink = {
   id: string
@@ -12,16 +14,13 @@ type ExternalResourceLink = {
 }
 
 export default function ExternalResourceLinks({
-  courseId,
   moduleId,
   links,
 }: {
-  courseId: string
   moduleId: string
   links: ExternalResourceLink[]
 }) {
-  void courseId
-  const router = useRouter()
+  const queryClient = useQueryClient()
   const didMarkRef = useRef(false)
 
   useEffect(() => {
@@ -29,29 +28,28 @@ export default function ExternalResourceLinks({
     didMarkRef.current = true
 
     const run = async () => {
-      const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) return
-      const { error } = await supabase.from('module_progress').upsert(
-        {
-          module_id: moduleId,
-          learner_id: user.id,
-          watch_pct: 100,
-          is_completed: true,
-          completed_at: new Date().toISOString(),
-        },
-        { onConflict: 'module_id,learner_id' },
-      )
-      if (!error) {
-        window.dispatchEvent(new Event('module-completed'))
-        router.refresh()
+      try {
+        const res = await fetchWithRetry('/api/modules/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ moduleId }),
+        })
+        const data = (await res.json().catch(() => ({}))) as { error?: string }
+        if (!res.ok) {
+          throw new Error(data.error ?? 'Could not save lesson completion')
+        }
+        queryClient.setQueryData(queryKeys.moduleProgress({ moduleId }), { completed: true })
+      } catch (error) {
+        didMarkRef.current = false
+        toast.error('Could not save lesson completion', {
+          description:
+            error instanceof Error ? error.message : 'Check your connection and try again.',
+        })
       }
     }
 
     void run()
-  }, [moduleId, router])
+  }, [moduleId, queryClient])
 
   return (
     <div className="space-y-4">

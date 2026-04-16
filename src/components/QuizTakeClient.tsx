@@ -1,10 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
-import { useRouter } from 'next/navigation'
 import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog'
 import { toast } from 'sonner'
+import { queryKeys } from '@/lib/query/query-keys'
+import { fetchWithRetry } from '@/lib/network-retry'
 
 export type QuizQuestionPublic = {
   id: string
@@ -47,7 +49,7 @@ export default function QuizTakeClient({
   allowRetest,
   introText,
   timeLimitMinutes = null,
-  questionsRandomized = false,
+  questionsRandomized: _questionsRandomized = false,
 }: {
   moduleId: string
   questions: QuizQuestionPublic[]
@@ -59,7 +61,7 @@ export default function QuizTakeClient({
   /** Instructor enabled per-learner question shuffle (server already reordered `questions`). */
   questionsRandomized?: boolean
 }) {
-  const router = useRouter()
+  const queryClient = useQueryClient()
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const answersRef = useRef(answers)
   answersRef.current = answers
@@ -84,6 +86,20 @@ export default function QuizTakeClient({
   const draftKey = useMemo(() => `quiz-draft:${moduleId}`, [moduleId])
   const hasTimeLimit =
     timeLimitMinutes != null && Number.isFinite(timeLimitMinutes) && timeLimitMinutes >= 1
+  void _questionsRandomized
+
+  const quizSubmitMutation = useMutation({
+    mutationFn: async (payload: { moduleId: string; answers: Record<string, string> }) => {
+      const res = await fetchWithRetry('/api/quiz/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = (await res.json().catch(() => ({}))) as QuizSubmitResponse
+      if (!res.ok) throw new Error(data.error ?? 'Submit failed')
+      return data
+    },
+  })
 
   const submitQuiz = useCallback(async (isAuto = false) => {
     setConfirmOpen(false)
@@ -98,16 +114,10 @@ export default function QuizTakeClient({
     }
     setSubmitting(true)
     try {
-      const res = await fetch('/api/quiz/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ moduleId, answers: answersRef.current }),
+      const data = await quizSubmitMutation.mutateAsync({
+        moduleId,
+        answers: answersRef.current,
       })
-      const data = (await res.json().catch(() => ({}))) as QuizSubmitResponse
-      if (!res.ok) {
-        setError(data.error ?? 'Submit failed')
-        return
-      }
       setReviewRows(data.review ?? [])
       setSubmittedNow(true)
       setResult({
@@ -118,14 +128,17 @@ export default function QuizTakeClient({
         passingPct: data.passingPct,
         bestAttemptKept: !!data.bestAttemptKept,
       })
-      router.refresh()
+      queryClient.setQueryData(queryKeys.moduleProgress({ moduleId }), {
+        completed: data.passed,
+      })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.quizResult({ moduleId }) })
       window.localStorage.removeItem(draftKey)
-    } catch {
-      setError('Network error')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error')
     } finally {
       setSubmitting(false)
     }
-  }, [questions, moduleId, router, draftKey])
+  }, [questions, moduleId, queryClient, draftKey, quizSubmitMutation])
 
   const submitQuizRef = useRef(submitQuiz)
   submitQuizRef.current = submitQuiz
@@ -139,7 +152,6 @@ export default function QuizTakeClient({
         if (rem <= 0 && !timeUpHandledRef.current) {
           timeUpHandledRef.current = true
           setTimeExpired(true)
-          const allDone = questions.every((q) => !!answersRef.current[q.id])
           void submitQuizRef.current(true)
           window.localStorage.removeItem(draftKey)
         }
@@ -150,13 +162,18 @@ export default function QuizTakeClient({
     tick()
     const timer = window.setInterval(tick, 1000)
     return () => window.clearInterval(timer)
-  }, [startedAt, result, quizStarted, deadlineAt, timeExpired, questions])
+  }, [deadlineAt, draftKey, quizStarted, result, startedAt, timeExpired])
 
   useEffect(() => {
   if (result) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 }, [result]);
+
+useEffect(() => {
+  if (!timeExpired || result) return
+  toast.warning("Time's up! We are submitting your answers automatically...")
+}, [result, timeExpired])
 
 // begin of capturing effects related to unsaved progress warning
 
@@ -173,7 +190,7 @@ useEffect(() => {
   return () => {
     window.removeEventListener('beforeunload', handleBeforeUnload);
   };
-}, [quizStarted, result, submitting]);
+}, [draftKey, quizStarted, result, submitting]);
 
 useEffect(() => {
   if (!quizStarted || result) return;
@@ -452,9 +469,6 @@ useEffect(() => {
 
   return (
     <div className="space-y-6 pb-20 lg:pb-0">
-      {timeExpired && !result && (
-        toast.warning('Time\'s up! We are submitting your answers automatically...')
-      )}
       <div className="fixed inset-x-0 top-0 z-50 rounded-none border-b border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur-md lg:sticky lg:top-18 lg:z-30 lg:mb-6 lg:rounded-xl lg:border lg:bg-slate-50/95">
         <div className="mx-auto max-w-3xl"> {/* Keeps content aligned with your quiz width */}
           <div className="flex flex-wrap items-center justify-between gap-2">
