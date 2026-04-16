@@ -18,8 +18,18 @@ import {
   type OfflineBindDeadLetter,
   type OfflineBindQueueItem,
 } from '@/lib/offline-bind-queue'
-import { Camera, Scan, Search, X, XCircle } from 'lucide-react'
+import { Camera, Search, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
+import {
+  Combobox,
+  ComboboxCollection,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from '@/components/ui/combobox'
+import { Field, FieldContent, FieldDescription, FieldLabel } from '@/components/ui/field'
 
 type LearnerOption = { id: string; full_name: string | null; email: string | null }
 
@@ -57,6 +67,7 @@ export default function BindCardsClient({
   isAdmin: boolean
 }) {
   const readerDomId = useId().replace(/:/g, '')
+  const courseComboId = useId()
   const [courseId, setCourseId] = useState('')
   const [learnerQuery, setLearnerQuery] = useState('')
   const [learnerHits, setLearnerHits] = useState<LearnerOption[]>([])
@@ -77,10 +88,14 @@ export default function BindCardsClient({
   // Default true for SSR + first client paint so markup matches (avoids hydration mismatch).
   const [online, setOnline] = useState(true)
 
+  const selectedCourse = useMemo(
+    () => courses.find((x) => x.id === courseId) ?? null,
+    [courses, courseId],
+  )
+
   const courseTitle = useMemo(() => {
-    const c = courses.find((x) => x.id === courseId)
-    return c ? `${c.title} (${c.course_code})` : ''
-  }, [courses, courseId])
+    return selectedCourse ? `${selectedCourse.title} (${selectedCourse.course_code})` : ''
+  }, [selectedCourse])
 
   const normalizedCode = useMemo(() => normalizeOfflinePublicCode(codeInput), [codeInput])
 
@@ -467,40 +482,64 @@ export default function BindCardsClient({
     <div className="space-y-4">
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-800">1. Course and learner</h2>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-slate-600">Course</label>
-          <select
-            value={courseId}
-            onChange={(e) => {
-              setCourseId(e.target.value)
-              setLearnerPick(null)
-              setLearnerQuery('')
-              setLearnerHits([])
-              setLearnerSearchNote(null)
-              setPreviewLookup(null)
-            }}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"
-          >
-            <option value="">Select course…</option>
-            {courses.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.title} ({c.course_code})
-              </option>
-            ))}
-          </select>
-          {courseId && courseLearnersLoading && (
-            <p className="text-xs text-slate-500 pt-1">Loading enrolled learners…</p>
-          )}
-          {courseId && !courseLearnersLoading && !courseLearnersErr && (
-            <p className="text-xs text-slate-600 pt-1">
-              {courseLearners.length} learner{courseLearners.length === 1 ? '' : 's'} in roster (cached for
-              search)
-            </p>
-          )}
-          {courseId && courseLearnersErr && (
-            <p className="text-xs text-red-700 pt-1">{courseLearnersErr}</p>
-          )}
-        </div>
+        <Field>
+          <FieldLabel htmlFor={courseComboId} className="text-xs font-medium text-slate-600">
+            Course
+          </FieldLabel>
+          <FieldContent className="flex flex-col gap-1">
+            {courses.length === 0 ? (
+              <FieldDescription>
+                No courses are available here yet. Draft courses are not listed.
+              </FieldDescription>
+            ) : (
+              <Combobox
+                items={courses}
+                value={selectedCourse}
+                onValueChange={(c) => {
+                  setCourseId(c?.id ?? '')
+                  setLearnerPick(null)
+                  setLearnerQuery('')
+                  setLearnerHits([])
+                  setLearnerSearchNote(null)
+                  setPreviewLookup(null)
+                }}
+                itemToStringLabel={(c) => `${c.title} (${c.course_code})`}
+                isItemEqualToValue={(a, b) => a.id === b.id}
+              >
+                <ComboboxInput
+                  id={courseComboId}
+                  placeholder="Search or pick a course…"
+                  showClear={!!courseId}
+                  className="w-full min-w-0 h-10"  // force with !important
+                />
+                <ComboboxContent>
+                  <ComboboxEmpty>No course matches.</ComboboxEmpty>
+                  <ComboboxList>
+                    <ComboboxCollection>
+                      {(c: AttendanceCourseOption) => (
+                        <ComboboxItem key={c.id} value={c}>
+                          {c.title} ({c.course_code})
+                        </ComboboxItem>
+                      )}
+                    </ComboboxCollection>
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
+            )}
+            {courseId && courseLearnersLoading && (
+              <p className="text-xs text-slate-500">Loading enrolled learners…</p>
+            )}
+            {courseId && !courseLearnersLoading && !courseLearnersErr && (
+              <p className="text-xs text-slate-600">
+                {courseLearners.length} learner{courseLearners.length === 1 ? '' : 's'} in roster (cached for
+                search)
+              </p>
+            )}
+            {courseId && courseLearnersErr && (
+              <p className="text-xs text-red-700">{courseLearnersErr}</p>
+            )}
+          </FieldContent>
+        </Field>
         <div className="space-y-1">
           <label className="text-xs font-medium text-slate-600">Find learner by name or email</label>
           <div className="flex flex-wrap gap-2 items-center">

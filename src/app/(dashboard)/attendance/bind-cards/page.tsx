@@ -18,7 +18,11 @@ export default async function BindOfflineIdCardsPage() {
     redirect('/unauthorized')
   }
 
-  let coursesQuery = supabase.from('courses').select('id, title, course_code').order('title')
+  let coursesQuery = supabase
+    .from('courses')
+    .select('id, title, course_code')
+    .neq('status', 'draft')
+    .order('title')
   if (role !== ROLES.ADMIN && role !== ROLES.COORDINATOR) {
     coursesQuery = coursesQuery.eq('instructor_id', user.id)
   }

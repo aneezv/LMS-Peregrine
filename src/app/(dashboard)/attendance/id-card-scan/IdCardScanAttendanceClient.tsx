@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { AttendanceCourseOption } from '../AttendanceClient'
 import {
   finalizeIdCardSessionAttendance,
@@ -12,6 +12,16 @@ import {
 import { normalizeOfflinePublicCode, OFFLINE_ID_CODE_RE } from '@/lib/offline-id-card'
 import { Camera, XCircle } from 'lucide-react'
 import { formatLocalDisplay } from '@/lib/timestamp'
+import {
+  Combobox,
+  ComboboxCollection,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from '@/components/ui/combobox'
+import { Field, FieldContent, FieldDescription, FieldLabel } from '@/components/ui/field'
 
 type LogEntry = {
   id: string
@@ -29,6 +39,7 @@ function formatSessionLabel(s: OfflineSessionOption): string {
 
 export default function IdCardScanAttendanceClient({ courses }: { courses: AttendanceCourseOption[] }) {
   const readerDomId = useId().replace(/:/g, '')
+  const courseComboId = useId()
   const [courseId, setCourseId] = useState('')
   const [moduleId, setModuleId] = useState('')
   const [sessions, setSessions] = useState<OfflineSessionOption[]>([])
@@ -52,6 +63,11 @@ export default function IdCardScanAttendanceClient({ courses }: { courses: Atten
 
   const normalizedCode = normalizeOfflinePublicCode(codeInput)
 
+  const selectedCourse = useMemo(
+    () => courses.find((c) => c.id === courseId) ?? null,
+    [courses, courseId],
+  )
+
   const loadSessions = useCallback(async (cid: string) => {
     if (!cid) {
       setSessions([])
@@ -69,9 +85,6 @@ export default function IdCardScanAttendanceClient({ courses }: { courses: Atten
         return
       }
       setSessions(res.sessions)
-      if (res.sessions.length === 1) {
-        setModuleId(res.sessions[0].id)
-      }
     } finally {
       setSessionsLoading(false)
     }
@@ -268,23 +281,49 @@ export default function IdCardScanAttendanceClient({ courses }: { courses: Atten
             </button>
           </div>
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        
         <h2 className="text-sm font-semibold text-slate-800">1. Course</h2>
-        <select
-          value={courseId}
-          onChange={(e) => {
-            setCourseId(e.target.value)
-            setLastResult(null)
-          }}
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"
-        >
-          <option value="">Select course…</option>
-          {courses.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.title} ({c.course_code})
-            </option>
-          ))}
-        </select>
+        <Field>
+          <FieldLabel htmlFor={courseComboId} className="text-xs font-medium text-slate-600">
+            Course
+          </FieldLabel>
+          <FieldContent className="flex flex-col gap-1">
+            {courses.length === 0 ? (
+              <FieldDescription>
+                No courses are available here yet. Draft courses are not listed.
+              </FieldDescription>
+            ) : (
+              <Combobox
+                items={courses}
+                value={selectedCourse}
+                onValueChange={(c) => {
+                  setCourseId(c?.id ?? '')
+                  setLastResult(null)
+                }}
+                itemToStringLabel={(c) => `${c.title} (${c.course_code})`}
+                isItemEqualToValue={(a, b) => a.id === b.id}
+              >
+                <ComboboxInput
+                  id={courseComboId}
+                  placeholder="Search or pick a course…"
+                  showClear={!!courseId}
+                  className="w-full min-w-0 h-10"
+                />
+                <ComboboxContent>
+                  <ComboboxEmpty>No course matches.</ComboboxEmpty>
+                  <ComboboxList>
+                    <ComboboxCollection>
+                      {(c: AttendanceCourseOption) => (
+                        <ComboboxItem key={c.id} value={c}>
+                          {c.title} ({c.course_code})
+                        </ComboboxItem>
+                      )}
+                    </ComboboxCollection>
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
+            )}
+          </FieldContent>
+        </Field>
       </section>
 
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
