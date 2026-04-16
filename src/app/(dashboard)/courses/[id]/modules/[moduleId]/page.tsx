@@ -631,6 +631,7 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
       {enrollment && !isCourseStaff && showNextButtonForType && (
         <NextLessonButton 
           courseId={courseId}
+          currentModuleId={moduleId}
           nextModule={nextModule}
           initialCompleted={currentModuleComplete}
           nextDisabledReason={nextDisabledReason}

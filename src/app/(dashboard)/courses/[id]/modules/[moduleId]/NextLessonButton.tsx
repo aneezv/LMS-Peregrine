@@ -2,10 +2,12 @@
 
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
+import { useModuleProgressStore } from '@/stores/module-progress.store'
 
 interface NextLessonButtonProps {
   courseId: string
+  currentModuleId: string
   nextModule: { id: string; title: string; locked: boolean; unlockAt: string | null } | null
   initialCompleted: boolean
   nextDisabledReason: string
@@ -13,27 +15,18 @@ interface NextLessonButtonProps {
 
 export default function NextLessonButton({ 
   courseId, 
+  currentModuleId,
   nextModule, 
   initialCompleted, 
   nextDisabledReason 
 }: NextLessonButtonProps) {
-  
-  // This state allows us to unlock the button instantly when the video finishes
-  const [isCompleted, setIsCompleted] = useState(initialCompleted)
+  const hydrate = useModuleProgressStore((state) => state.hydrate)
+  const isCompleted = useModuleProgressStore((state) => !!state.completedByModuleId[currentModuleId])
 
-  // Keep local state in sync when the server props update after module completion
   useEffect(() => {
-    if (initialCompleted) {
-      setIsCompleted(true)
-    }
-  }, [initialCompleted])
-
-  // This listener catches a custom event we will dispatch from the VideoModule and external resources
-  useEffect(() => {
-    const handleCompletion = () => setIsCompleted(true)
-    window.addEventListener('module-completed', handleCompletion)
-    return () => window.removeEventListener('module-completed', handleCompletion)
-  }, [])
+    if (!initialCompleted) return
+    hydrate([currentModuleId])
+  }, [currentModuleId, hydrate, initialCompleted])
 
   if (!nextModule) return null
 

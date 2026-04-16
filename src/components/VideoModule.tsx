@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import './VideoModule.plyr.css'
 import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
+import { useModuleProgressStore } from '@/stores/module-progress.store'
 
 const END_SECONDS_THRESHOLD = 10
 const VEIL_FADE_OUT_MS = 480
@@ -35,13 +36,13 @@ function isProbablyDirectVideo(url: string): boolean {
   return /\.(mp4|webm|ogg)(\?|$)/i.test(url.trim())
 }
 
-async function markVideoCompleteOnce(moduleId: string, doneRef: { current: boolean }) {
-  if (doneRef.current) return
+async function markVideoCompleteOnce(moduleId: string, doneRef: { current: boolean }): Promise<boolean> {
+  if (doneRef.current) return true
   const supabase = createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return
+  if (!user) return false
   doneRef.current = true
   const { error } = await supabase.from('module_progress').upsert(
     {
@@ -57,11 +58,14 @@ async function markVideoCompleteOnce(moduleId: string, doneRef: { current: boole
   if (error) {
     console.error("Supabase Error:", error);
     doneRef.current = false;
+    return false
   }
+  return true
 }
 
 export default function VideoModule({ moduleId, contentUrl }: VideoModuleProps) {
   const router = useRouter()
+  const markCompleted = useModuleProgressStore((state) => state.markCompleted)
   const embedRef = useRef<HTMLDivElement>(null)
   const ytId = extractYouTubeId(contentUrl)
   const vimeoId = !ytId ? extractVimeoId(contentUrl) : null
@@ -108,13 +112,14 @@ export default function VideoModule({ moduleId, contentUrl }: VideoModuleProps) 
 
   const onReachEnd = useCallback(() => {
     const run = async () => {
-      await markVideoCompleteOnce(moduleId, doneRef)
-      // BROADCAST COMPLETION TO OTHER COMPONENTS
-      window.dispatchEvent(new Event('module-completed'))
+      const completed = await markVideoCompleteOnce(moduleId, doneRef)
+      if (completed) {
+        markCompleted(moduleId)
+      }
       router.refresh()
     }
     void run()
-  }, [moduleId, router])
+  }, [markCompleted, moduleId, router])
 
   useEffect(() => {
     if (!provider || !embedId || !embedRef.current) return

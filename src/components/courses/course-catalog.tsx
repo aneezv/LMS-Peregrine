@@ -2,15 +2,12 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo } from 'react'
 import { BookOpen, ChevronRight, Search, Users } from 'lucide-react'
 import { EmptyState } from '@/components/ui/primitives'
 import { toRenderableImageUrl } from '@/lib/drive-image'
-import {
-  CATALOG_PAGE_SIZE,
-  type CatalogCourse,
-  type CatalogDepartment,
-} from '@/lib/catalog-courses'
+import { CATALOG_PAGE_SIZE, type CatalogCourse, type CatalogDepartment } from '@/lib/catalog-courses'
+import { useCourseCatalogStore } from '@/stores/course-catalog.store'
 
 export type { CatalogCourse, CatalogDepartment } from '@/lib/catalog-courses'
 
@@ -117,13 +114,18 @@ export function CourseCatalog({
   departmentId: string
   fetchError: string | null
 }) {
-  const [courses, setCourses] = useState(initialCourses)
-  const [totalCount, setTotalCount] = useState(initialTotalCount)
-  const [page, setPage] = useState(initialPage)
-  const [q, setQ] = useState(initialQ)
-  const [departmentId, setDepartmentId] = useState(initialDepartmentId)
-  const [fetchError, setFetchError] = useState<string | null>(initialFetchError)
-  const [pending, startTransition] = useTransition()
+  const courses = useCourseCatalogStore((state) => state.courses)
+  const totalCount = useCourseCatalogStore((state) => state.totalCount)
+  const page = useCourseCatalogStore((state) => state.page)
+  const q = useCourseCatalogStore((state) => state.q)
+  const departmentId = useCourseCatalogStore((state) => state.departmentId)
+  const fetchError = useCourseCatalogStore((state) => state.fetchError)
+  const pending = useCourseCatalogStore((state) => state.pending)
+  const hydrate = useCourseCatalogStore((state) => state.hydrate)
+  const setQuery = useCourseCatalogStore((state) => state.setQuery)
+  const setDepartment = useCourseCatalogStore((state) => state.setDepartmentId)
+  const resetFilters = useCourseCatalogStore((state) => state.resetFilters)
+  const loadPage = useCourseCatalogStore((state) => state.loadPage)
 
   const sections = useMemo(() => groupCatalogByDepartment(courses), [courses])
   const from = totalCount === 0 ? 0 : (page - 1) * CATALOG_PAGE_SIZE + 1
@@ -132,45 +134,31 @@ export function CourseCatalog({
   const countLabel =
     totalCount === 1 ? '1 course matches' : `${totalCount} courses match`
 
+  useEffect(() => {
+    hydrate({
+      courses: initialCourses,
+      totalCount: initialTotalCount,
+      page: initialPage,
+      q: initialQ,
+      departmentId: initialDepartmentId,
+      fetchError: initialFetchError,
+    })
+  }, [
+    hydrate,
+    initialCourses,
+    initialDepartmentId,
+    initialFetchError,
+    initialPage,
+    initialQ,
+    initialTotalCount,
+  ])
+
   if (fetchError) {
     return (
       <div className="rounded-xl border border-red-200 bg-red-50/80 p-6 text-sm text-red-800">
         {fetchError}
       </div>
     )
-  }
-
-  async function loadPage(nextPage: number, nextQuery: string, nextDept: string) {
-    startTransition(async () => {
-      setFetchError(null)
-      const params = new URLSearchParams()
-      if (nextQuery.trim()) params.set('q', nextQuery.trim())
-      if (nextDept.trim()) params.set('dept', nextDept.trim())
-      if (nextPage > 1) params.set('page', String(nextPage))
-      const query = params.toString()
-      const url = query ? `/api/courses/catalog?${query}` : '/api/courses/catalog'
-      const pageUrl = query ? `/courses?${query}` : '/courses'
-
-      try {
-        const res = await fetch(url, { cache: 'no-store' })
-        const json = (await res.json()) as {
-          courses?: CatalogCourse[]
-          totalCount?: number
-          error?: string
-        }
-        if (!res.ok) {
-          throw new Error(json.error || 'Failed to load course catalog.')
-        }
-        setCourses(json.courses ?? [])
-        setTotalCount(json.totalCount ?? 0)
-        setPage(nextPage)
-        setQ(nextQuery)
-        setDepartmentId(nextDept)
-        window.history.replaceState(null, '', pageUrl)
-      } catch (err) {
-        setFetchError(err instanceof Error ? err.message : 'Failed to load course catalog.')
-      }
-    })
   }
 
   return (
@@ -191,7 +179,7 @@ export function CourseCatalog({
             className="flex w-full flex-col gap-3 sm:flex-row sm:items-end lg:max-w-xl"
             onSubmit={(e) => {
               e.preventDefault()
-              loadPage(1, q, departmentId)
+              void loadPage(1, q, departmentId)
             }}
           >
             <div className="min-w-0 flex-1">
@@ -210,7 +198,7 @@ export function CourseCatalog({
                   autoComplete="off"
                   placeholder="Title, code, description…"
                   value={q}
-                  onChange={(e) => setQ(e.target.value)}
+                  onChange={(e) => setQuery(e.target.value)}
                   className="min-h-11 w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 shadow-inner placeholder:text-slate-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                 />
               </div>
@@ -222,7 +210,7 @@ export function CourseCatalog({
               <select
                 id="course-catalog-dept"
                 value={departmentId}
-                onChange={(e) => setDepartmentId(e.target.value)}
+                onChange={(e) => setDepartment(e.target.value)}
                 className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
               >
                 <option value="">All departments</option>
@@ -240,6 +228,17 @@ export function CourseCatalog({
             >
               {pending ? 'Applying…' : 'Apply'}
             </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                resetFilters()
+                void loadPage(1, '', '')
+              }}
+              className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              Clear
+            </button>
           </form>
         </div>
       </section>
@@ -253,7 +252,10 @@ export function CourseCatalog({
             </p>
             <button
               type="button"
-              onClick={() => loadPage(1, '', '')}
+              onClick={() => {
+                resetFilters()
+                void loadPage(1, '', '')
+              }}
               className="mt-4 inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
             >
               Clear filters
@@ -299,7 +301,7 @@ export function CourseCatalog({
               {page > 1 ? (
                 <button
                   type="button"
-                  onClick={() => loadPage(page - 1, q, departmentId)}
+                  onClick={() => void loadPage(page - 1, q, departmentId)}
                   disabled={pending}
                   className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
                 >
@@ -309,7 +311,7 @@ export function CourseCatalog({
               {hasMore ? (
                 <button
                   type="button"
-                  onClick={() => loadPage(page + 1, q, departmentId)}
+                  onClick={() => void loadPage(page + 1, q, departmentId)}
                   disabled={pending}
                   className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
                 >

@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import { ExternalLink } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
+import { useModuleProgressStore } from '@/stores/module-progress.store'
 
 type ExternalResourceLink = {
   id: string
@@ -22,6 +23,7 @@ export default function ExternalResourceLinks({
 }) {
   void courseId
   const router = useRouter()
+  const markCompleted = useModuleProgressStore((state) => state.markCompleted)
   const didMarkRef = useRef(false)
 
   useEffect(() => {
@@ -45,13 +47,13 @@ export default function ExternalResourceLinks({
         { onConflict: 'module_id,learner_id' },
       )
       if (!error) {
-        window.dispatchEvent(new Event('module-completed'))
+        markCompleted(moduleId)
         router.refresh()
       }
     }
 
     void run()
-  }, [moduleId, router])
+  }, [markCompleted, moduleId, router])
 
   return (
     <div className="space-y-4">
