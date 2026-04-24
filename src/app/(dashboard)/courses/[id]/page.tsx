@@ -34,43 +34,36 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: course } = await supabase
-    .from('courses')
-    .select(`
-      id, instructor_id, course_code, title, description, thumbnail_url, starts_at, enrollment_type,
-      profiles:instructor_id ( full_name ),
-      department:department_id ( id, name )
-    `)
-    .eq('id', id)
-    .single()
+  // Step 1: Run all independent queries in parallel
+  const [courseResult, profileResult, modulesResult, enrollmentResult] = await Promise.all([
+    supabase
+      .from('courses')
+      .select(`
+        id, instructor_id, course_code, title, description, thumbnail_url, starts_at, enrollment_type,
+        profiles:instructor_id ( full_name ),
+        department:department_id ( id, name )
+      `)
+      .eq('id', id)
+      .single(),
+    supabase.from('profiles').select('role').eq('id', user.id).maybeSingle(),
+    supabase
+      .from('modules')
+      .select('id, title, type, available_from, is_sequential, sort_order, week_index')
+      .eq('course_id', id)
+      .order('sort_order', { ascending: true }),
+    supabase.from('enrollments').select('id').eq('course_id', id).eq('learner_id', user.id).maybeSingle(),
+  ])
 
+  const course = courseResult.data
   if (!course) notFound()
 
-  const { data: viewerProfile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  const isAdmin = viewerProfile?.role === ROLES.ADMIN
+  const isAdmin = profileResult.data?.role === ROLES.ADMIN
   const isCourseInstructor = course.instructor_id === user.id
   const isCourseStaff = isCourseInstructor || isAdmin
   const canManageCourse = isCourseInstructor || isAdmin
 
-  const { data: modules } = await supabase
-    .from('modules')
-    .select('id, title, type, available_from, is_sequential, sort_order, week_index')
-    .eq('course_id', id)
-    .order('sort_order', { ascending: true })
-
-  const { data: enrollment } = await supabase
-    .from('enrollments')
-    .select('id')
-    .eq('course_id', id)
-    .eq('learner_id', user.id)
-    .maybeSingle()
-
-  const isEnrolled = !!enrollment
+  const modules = modulesResult.data
+  const isEnrolled = !!enrollmentResult.data
 
   if (course.enrollment_type === 'invite_only' && !isCourseStaff && !isEnrolled) {
     redirect('/courses')
@@ -78,6 +71,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
 
   const sectionGroups = groupModulesByWeek(modules ?? [])
 
+  // Step 2: Module status RPC (depends on modules list + enrollment check)
   const moduleUi = isEnrolled
     ? await getLearnerModuleStatusMap(
         supabase,
@@ -98,6 +92,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
 
   const completionPct = totalModules > 0 ? Math.round((completedModules * 100) / totalModules) : 0
 
+  // Step 3: Course completion check + auto-insert (depends on step 2)
   let completionRow = isEnrolled
     ? (
         await supabase

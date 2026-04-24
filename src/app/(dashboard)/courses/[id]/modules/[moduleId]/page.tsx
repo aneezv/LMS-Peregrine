@@ -28,31 +28,21 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: courseRow } = await supabase
-    .from('courses')
-    .select('instructor_id')
-    .eq('id', courseId)
-    .single()
+  // Step 1: Run independent auth queries in parallel
+  const [courseResult, profileResult, enrollmentResult] = await Promise.all([
+    supabase.from('courses').select('instructor_id').eq('id', courseId).single(),
+    supabase.from('profiles').select('role').eq('id', user.id).maybeSingle(),
+    supabase.from('enrollments').select('id').eq('course_id', courseId).eq('learner_id', user.id).maybeSingle(),
+  ])
 
-  const { data: viewerProfile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  const isAdmin = viewerProfile?.role === ROLES.ADMIN
-  const isCourseInstructor = courseRow?.instructor_id === user.id
+  const isAdmin = profileResult.data?.role === ROLES.ADMIN
+  const isCourseInstructor = courseResult.data?.instructor_id === user.id
   const isCourseStaff = isCourseInstructor || isAdmin
-
-  const { data: enrollment } = await supabase
-    .from('enrollments')
-    .select('id')
-    .eq('course_id', courseId)
-    .eq('learner_id', user.id)
-    .maybeSingle()
+  const enrollment = enrollmentResult.data
 
   if (!isCourseStaff && !enrollment) redirect(`/courses/${courseId}`)
 
+  // Step 2: Fetch module data (single query with nested embeds — already efficient)
   const { data: mod, error: modulesQueryError } = await supabase
     .from('modules')
     .select(
@@ -97,19 +87,6 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
 
   const assignmentRow = firstEmbeddedAssignment(mod.assignments)
   const secondaryErrors: string[] = []
-
-  /* TESTING embed-only path: re-enable if nested `assignments` is empty but row exists in DB.
-  let ar = firstEmbeddedAssignment(mod.assignments)
-  if (mod.type === 'assignment' && !ar) {
-    const { data: asn, error: asnErr } = await supabase
-      .from('assignments')
-      .select('id, description, max_score, passing_score, deadline_at, allow_late')
-      .eq('module_id', moduleId)
-      .maybeSingle()
-    if (asnErr) console.error('[lesson] assignments fallback', asnErr)
-    ar = firstEmbeddedAssignment(asn)
-  }
-  */
 
   const passingPct =
     typeof mod.quiz_passing_pct === 'number'
@@ -159,33 +136,78 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
       ? Math.min(1440, Math.trunc(Number(rawQuizTlim)))
       : null
 
+  // Step 3: Run all conditional status queries in parallel (all independent of each other)
   let quizInitialResult: QuizResult | null = null
   let feedbackSubmitted = false
   let sessionAttendanceMarked = false
   let progressCompleted = false
   let assignmentGraded = false
+  let nextModule: { id: string; title: string; locked: boolean; unlockAt: string | null } | null = null
 
   if (enrollment) {
-    const { data: progress, error: progressErr } = await supabase
+    // Build an array of all queries we need to run, then execute them together
+    const progressPromise = supabase
       .from('module_progress')
       .select('is_completed')
       .eq('module_id', moduleId)
       .eq('learner_id', user.id)
       .maybeSingle()
-    if (progressErr) secondaryErrors.push(`module_progress: ${progressErr.message}`)
-    progressCompleted = !!progress?.is_completed
+
+    const quizPromise = mod.type === 'mcq'
+      ? supabase
+          .from('quiz_attempts')
+          .select('score, max_score, passed')
+          .eq('module_id', moduleId)
+          .eq('learner_id', user.id)
+          .order('score', { ascending: false })
+          .order('submitted_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null })
+
+    const feedbackPromise = mod.type === 'feedback'
+      ? supabase
+          .from('module_feedback_submissions')
+          .select('id')
+          .eq('module_id', moduleId)
+          .eq('learner_id', user.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null })
+
+    const assignmentId = assignmentRow?.id
+    const submissionPromise = mod.type === 'assignment' && assignmentId
+      ? supabase
+          .from('submissions')
+          .select('graded_at')
+          .eq('assignment_id', assignmentId)
+          .eq('learner_id', user.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null })
+
+    const nextModulePromise = !isCourseStaff
+      ? supabase
+          .from('modules')
+          .select('id, title, available_from')
+          .eq('course_id', courseId)
+          .order('sort_order', { ascending: true })
+      : Promise.resolve({ data: null, error: null })
+
+    // Execute all queries at once
+    const [progressRes, quizRes, feedbackRes, submissionRes, nextModRes] = await Promise.all([
+      progressPromise,
+      quizPromise,
+      feedbackPromise,
+      submissionPromise,
+      nextModulePromise,
+    ])
+
+    // Process results
+    if (progressRes.error) secondaryErrors.push(`module_progress: ${progressRes.error.message}`)
+    progressCompleted = !!progressRes.data?.is_completed
 
     if (mod.type === 'mcq') {
-      const { data: attempt, error: attemptErr } = await supabase
-        .from('quiz_attempts')
-        .select('score, max_score, passed')
-        .eq('module_id', moduleId)
-        .eq('learner_id', user.id)
-        .order('score', { ascending: false })
-        .order('submitted_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      if (attemptErr) secondaryErrors.push(`quiz_attempts: ${attemptErr.message}`)
+      if (quizRes.error) secondaryErrors.push(`quiz_attempts: ${quizRes.error.message}`)
+      const attempt = quizRes.data
       if (attempt) {
         const maxScore = (attempt.max_score as number) ?? 0
         const score = (attempt.score as number) ?? 0
@@ -199,30 +221,40 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
         }
       }
     }
+
     if (mod.type === 'feedback') {
-      const { data: fb, error: fbErr } = await supabase
-        .from('module_feedback_submissions')
-        .select('id')
-        .eq('module_id', moduleId)
-        .eq('learner_id', user.id)
-        .maybeSingle()
-      if (fbErr) secondaryErrors.push(`module_feedback_submissions: ${fbErr.message}`)
-      feedbackSubmitted = !!fb
+      if (feedbackRes.error) secondaryErrors.push(`module_feedback_submissions: ${feedbackRes.error.message}`)
+      feedbackSubmitted = !!feedbackRes.data
     }
+
     if (mod.type === 'live_session' || mod.type === 'offline_session') {
       sessionAttendanceMarked = progressCompleted
     }
+
     if (mod.type === 'assignment') {
-      const assignmentId = assignmentRow?.id
-      if (assignmentId) {
-        const { data: sub, error: subErr } = await supabase
-          .from('submissions')
-          .select('graded_at')
-          .eq('assignment_id', assignmentId)
-          .eq('learner_id', user.id)
-          .maybeSingle()
-        if (subErr) secondaryErrors.push(`submissions: ${subErr.message}`)
-        assignmentGraded = !!sub?.graded_at
+      if (submissionRes.error) secondaryErrors.push(`submissions: ${submissionRes.error.message}`)
+      assignmentGraded = !!submissionRes.data?.graded_at
+    }
+
+    // Next module navigation
+    if (!isCourseStaff) {
+      if (nextModRes.error) secondaryErrors.push(`next-module list: ${nextModRes.error.message}`)
+      const list = nextModRes.data ?? []
+      const currentIdx = list.findIndex((m: { id: string }) => m.id === moduleId)
+      const nowTs = Date.now()
+      if (currentIdx >= 0) {
+        const candidate = list[currentIdx + 1]
+        if (candidate) {
+          const locked =
+            candidate.available_from != null &&
+            new Date(candidate.available_from as string).getTime() > nowTs
+          nextModule = {
+            id: candidate.id as string,
+            title: candidate.title as string,
+            locked,
+            unlockAt: (candidate.available_from as string | null) ?? null,
+          }
+        }
       }
     }
   }
@@ -233,34 +265,6 @@ export default async function ModulePage({ params }: { params: Promise<{ id: str
     if (mod.type === 'assignment') return progressCompleted || assignmentGraded
     return progressCompleted
   })()
-
-  let nextModule: { id: string; title: string; locked: boolean; unlockAt: string | null } | null = null
-  if (enrollment && !isCourseStaff) {
-    const { data: orderedMods, error: orderedModsErr } = await supabase
-      .from('modules')
-      .select('id, title, available_from')
-      .eq('course_id', courseId)
-      .order('sort_order', { ascending: true })
-    if (orderedModsErr) secondaryErrors.push(`next-module list: ${orderedModsErr.message}`)
-
-    const list = orderedMods ?? []
-    const currentIdx = list.findIndex((m) => m.id === moduleId)
-    const nowTs = Date.now()
-    if (currentIdx >= 0) {
-      const candidate = list[currentIdx + 1]
-      if (candidate) {
-        const locked =
-          candidate.available_from != null &&
-          new Date(candidate.available_from as string).getTime() > nowTs
-        nextModule = {
-          id: candidate.id as string,
-          title: candidate.title as string,
-          locked,
-          unlockAt: (candidate.available_from as string | null) ?? null,
-        }
-      }
-    }
-  }
 
   const showNextButtonForType =
     mod.type !== 'assignment' &&

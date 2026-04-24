@@ -11,28 +11,20 @@ export default async function CourseFeedbackPage({ params }: { params: Promise<{
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: course } = await supabase
-    .from('courses')
-    .select('id, title, course_code, instructor_id')
-    .eq('id', courseId)
-    .single()
+  // Step 1: Fetch course + profile in parallel (independent queries)
+  const [courseResult, profileResult] = await Promise.all([
+    supabase.from('courses').select('id, title, course_code, instructor_id').eq('id', courseId).single(),
+    supabase.from('profiles').select('role').eq('id', user.id).maybeSingle(),
+  ])
 
+  const course = courseResult.data
   if (!course) notFound()
 
-  const { data: viewerProfile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  const isAdmin = viewerProfile?.role === ROLES.ADMIN
+  const isAdmin = profileResult.data?.role === ROLES.ADMIN
   const isCourseInstructor = course.instructor_id === user.id
-  const isCourseStaff = isCourseInstructor || isAdmin
+  if (!isCourseInstructor && !isAdmin) redirect(`/courses/${courseId}`)
 
-  if (!isCourseStaff) {
-    redirect(`/courses/${courseId}`)
-  }
-
+  // Step 2: Fetch feedback modules
   const { data: feedbackModules } = await supabase
     .from('modules')
     .select('id, title, week_index')
@@ -48,6 +40,7 @@ export default async function CourseFeedbackPage({ params }: { params: Promise<{
     ]),
   )
 
+  // Step 3: Fetch submissions + learner names in parallel (both depend on module IDs)
   const { data: subs } =
     feedbackModuleIds.length > 0
       ? await supabase
