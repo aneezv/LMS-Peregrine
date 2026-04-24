@@ -12,7 +12,7 @@
 -- ──────────────────────────────────────────────
 -- A. Missing foreign-key indexes
 -- ──────────────────────────────────────────────
-
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 -- sections → courses
 CREATE INDEX IF NOT EXISTS sections_course_id_idx
   ON public.sections (course_id);
