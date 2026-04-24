@@ -23,6 +23,7 @@ import {
   Users,
   X,
 } from 'lucide-react'
+import { APP_VERSION } from '@/lib/constants'
 
 export type NavItem = {
   href: string
@@ -193,7 +194,7 @@ export default function DashboardNavDrawer({
               ))}
             </nav>
 
-            <div className="border-t border-slate-100 p-3">
+            <div className="border-t border-slate-100 p-3 space-y-3">
               <form action="/auth/signout" method="post">
                 <button
                   type="submit"
@@ -203,6 +204,9 @@ export default function DashboardNavDrawer({
                   Sign out
                 </button>
               </form>
+              <div className="text-center text-[11px] font-semibold tracking-wider text-slate-400">
+                {APP_VERSION}
+              </div>
             </div>
           </aside>
         </>,
