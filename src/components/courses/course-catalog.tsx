@@ -128,7 +128,7 @@ export function CourseCatalog({
     <div className="space-y-5">
       <Link
         href="/dashboard"
-        className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 transition-colors hover:text-blue-600"
+        className="hidden lg:inline-flex items-center gap-1 text-xs font-semibold text-slate-500 transition-colors hover:text-blue-600"
       >
         <ChevronLeft className="h-3.5 w-3.5" />
         Back to Home

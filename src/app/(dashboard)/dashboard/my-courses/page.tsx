@@ -107,7 +107,7 @@ export default async function MyCoursesPage() {
     <div className="space-y-5 px-2 py-4">
       <Link
         href="/dashboard"
-        className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-blue-600 transition-colors"
+        className="hidden lg:inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-blue-600 transition-colors"
       >
         <ChevronLeft className="w-3.5 h-3.5" />
         Back to Home
