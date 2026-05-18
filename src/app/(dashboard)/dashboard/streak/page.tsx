@@ -143,7 +143,7 @@ export default async function StreakPage() {
         className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-blue-600 transition-colors"
       >
         <ChevronLeft className="w-3.5 h-3.5" />
-        Back to dashboard
+        Back to Home
       </Link>
 
       <PageHeader

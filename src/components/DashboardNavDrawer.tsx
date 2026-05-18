@@ -10,8 +10,9 @@ import {
   Clock,
   FileSpreadsheet,
   FileUp,
+  Flame,
   GraduationCap,
-  LayoutDashboard,
+  Home,
   LogOut,
   Menu,
   PlusCircle,
@@ -26,6 +27,8 @@ import {
   X,
 } from 'lucide-react'
 import { APP_VERSION } from '@/lib/constants'
+import { useNavDrawer } from '@/lib/stores/navDrawer'
+import { cn } from '@/lib/utils'
 
 export type NavItem = {
   href: string
@@ -50,20 +53,69 @@ export type NavItem = {
     | 'aiExternal'
     | 'addInstructor'
     | 'coupons'
+    | 'streak'
 }
 
 export type NavLinkSections = NavItem[][]
+
+export function iconFor(icon: NavItem['icon']) {
+  switch (icon) {
+    case 'dashboard':
+      return <Home className="h-4 w-4" />
+    case 'courses':
+      return <BookOpen className="h-4 w-4" />
+    case 'myCourses':
+      return <GraduationCap className="h-4 w-4" />
+    case 'grading':
+      return <ClipboardCheck className="h-4 w-4" />
+    case 'attendance':
+      return <UserCheck className="h-4 w-4" />
+    case 'attendanceReport':
+      return <BarChart3 className="h-4 w-4" />
+    case 'bindIdCards':
+      return <QrCode className="h-4 w-4" />
+    case 'idCardScanAttendance':
+      return <ScanLine className="h-4 w-4" />
+    case 'learnerIdLookup':
+      return <ScanSearch className="h-4 w-4" />
+    case 'internship':
+      return <Clock className="h-4 w-4" />
+    case 'createCourse':
+      return <PlusCircle className="h-4 w-4" />
+    case 'users':
+      return <Users className="h-4 w-4" />
+    case 'importIdCards':
+      return <FileUp className="h-4 w-4" />
+    case 'sheetSync':
+      return <FileSpreadsheet className="h-4 w-4" />
+    case 'addInstructor':
+      return <UserPlus className="h-4 w-4" />
+    case 'coupons':
+      return <Tag className="h-4 w-4" />
+    case 'streak':
+      return <Flame className="h-4 w-4" />
+    case 'aiExternal':
+      return <Sparkles className="h-4 w-4" />
+    default:
+      return <BookOpen className="h-4 w-4" />
+  }
+}
 
 export default function DashboardNavDrawer({
   name,
   role,
   sections,
+  hideTriggerBelowLg = false,
 }: {
   name: string
   role: string
   sections: NavLinkSections
+  /** Hide the hamburger trigger below `lg` (learners reach this drawer via the
+   *  bottom bar's "More" tab there); the drawer itself stays mounted. */
+  hideTriggerBelowLg?: boolean
 }) {
-  const [open, setOpen] = useState(false)
+  const open = useNavDrawer((s) => s.open)
+  const setOpen = useNavDrawer((s) => s.setOpen)
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -86,47 +138,6 @@ export default function DashboardNavDrawer({
       window.removeEventListener('keydown', onKeyDown)
     }
   }, [open])
-
-  function iconFor(icon: NavItem['icon']) {
-    switch (icon) {
-      case 'dashboard':
-        return <LayoutDashboard className="h-4 w-4" />
-      case 'courses':
-        return <BookOpen className="h-4 w-4" />
-      case 'myCourses':
-        return <GraduationCap className="h-4 w-4" />
-      case 'grading':
-        return <ClipboardCheck className="h-4 w-4" />
-      case 'attendance':
-        return <UserCheck className="h-4 w-4" />
-      case 'attendanceReport':
-        return <BarChart3 className="h-4 w-4" />
-      case 'bindIdCards':
-        return <QrCode className="h-4 w-4" />
-      case 'idCardScanAttendance':
-        return <ScanLine className="h-4 w-4" />
-      case 'learnerIdLookup':
-        return <ScanSearch className="h-4 w-4" />
-      case 'internship':
-        return <Clock className="h-4 w-4" />
-      case 'createCourse':
-        return <PlusCircle className="h-4 w-4" />
-      case 'users':
-        return <Users className="h-4 w-4" />
-      case 'importIdCards':
-        return <FileUp className="h-4 w-4" />
-      case 'sheetSync':
-        return <FileSpreadsheet className="h-4 w-4" />
-      case 'addInstructor':
-        return <UserPlus className="h-4 w-4" />
-      case 'coupons':
-        return <Tag className="h-4 w-4" />
-      case 'aiExternal':
-        return <Sparkles className="h-4 w-4" />
-      default:
-        return <BookOpen className="h-4 w-4" />
-    }
-  }
 
   const nonEmptySections = sections.filter((s) => s.length > 0)
 
@@ -161,7 +172,10 @@ export default function DashboardNavDrawer({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center rounded-lg border border-slate-200 px-2.5 py-2 text-slate-700 hover:bg-slate-100"
+        className={cn(
+          'items-center rounded-lg border border-slate-200 px-2.5 py-2 text-slate-700 hover:bg-slate-100',
+          hideTriggerBelowLg ? 'hidden lg:inline-flex' : 'inline-flex',
+        )}
         aria-label="Open navigation menu"
         aria-expanded={open}
       >

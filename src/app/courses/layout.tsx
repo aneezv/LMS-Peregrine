@@ -3,6 +3,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { LogOut, Sparkles } from 'lucide-react'
 import DashboardNavDrawer, { type NavLinkSections } from '@/components/DashboardNavDrawer'
+import BottomNav from '@/components/BottomNav'
+import { LEARNER_PRIMARY_NAV } from '@/lib/nav'
 import { DashboardLearnerWidgets } from '@/components/internship/DashboardLearnerWidgets'
 import { ROLES, isInstructorRole } from '@/lib/roles'
 import { HomeNavbar } from '@/components/home/HomeNavbar'
@@ -35,10 +37,11 @@ export default async function CoursesLayout({
   const isInstructor = isInstructorRole(role)
   const isAdmin = role === ROLES.ADMIN
   const isCardCoordinator = role === ROLES.COORDINATOR
+  const isLearner = isAuthenticated && role === ROLES.LEARNER
 
   const navSections: NavLinkSections = isCardCoordinator
     ? [
-        [{ href: '/dashboard', label: 'Dashboard', icon: 'dashboard' }],
+        [{ href: '/dashboard', label: 'Home', icon: 'dashboard' }],
         [
           { href: '/attendance/bind-cards', label: 'Bind ID Cards', icon: 'bindIdCards' },
           { href: '/attendance/id-card-scan', label: 'Scan ID attendance', icon: 'idCardScanAttendance' },
@@ -48,7 +51,7 @@ export default async function CoursesLayout({
       ]
     : [
         [
-          { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+          { href: '/dashboard', label: 'Home', icon: 'dashboard' },
           { href: '/courses', label: isInstructor ? 'All Courses' : 'Course Catalog', icon: 'courses' },
           ...(!isInstructor ? [{ href: '/dashboard/my-courses', label: 'My Courses', icon: 'myCourses' as const }] : []),
           ...(isInstructor ? [{ href: '/grading', label: 'Grading', icon: 'grading' as const }] : []),
@@ -132,7 +135,7 @@ export default async function CoursesLayout({
                     <LogOut className="h-4 w-4" />
                   </button>
                 </form>
-                <DashboardNavDrawer name={name} role={roleLabel} sections={navSections} />
+                <DashboardNavDrawer name={name} role={roleLabel} sections={navSections} hideTriggerBelowLg={isLearner} />
               </div>
             </div>
           </div>
@@ -143,9 +146,17 @@ export default async function CoursesLayout({
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-1 py-1 sm:px-6 sm:py-8 lg:px-8">
         {children}
+        {isLearner && (
+          <div
+            aria-hidden
+            className="lg:hidden"
+            style={{ height: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}
+          />
+        )}
       </main>
 
       {isAuthenticated && <DashboardLearnerWidgets show={role === ROLES.LEARNER} />}
+      {isLearner && <BottomNav items={LEARNER_PRIMARY_NAV} />}
     </div>
   )
 }

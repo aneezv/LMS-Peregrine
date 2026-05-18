@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Search, X } from 'lucide-react'
-import { EmptyState } from '@/components/ui/primitives'
+import { BookOpen, ChevronLeft, Search, X } from 'lucide-react'
+import { EmptyState, PageHeader } from '@/components/ui/primitives'
 import { CATALOG_PAGE_SIZE, type CatalogCourse, type CatalogDepartment } from '@/lib/catalog-courses'
 import { queryKeys } from '@/lib/query/query-keys'
 import { CourseCard } from '@/components/courses/CourseCard'
@@ -103,8 +104,6 @@ export function CourseCatalog({
   const from = totalCount === 0 ? 0 : (page - 1) * CATALOG_PAGE_SIZE + 1
   const to = Math.min(page * CATALOG_PAGE_SIZE, totalCount)
   const hasMore = page * CATALOG_PAGE_SIZE < totalCount
-  const countLabel =
-    totalCount === 1 ? '1 course matches' : `${totalCount} courses match`
 
   function navigate(nextPage: number, nextQuery: string, nextDept: string) {
     const params = new URLSearchParams()
@@ -126,113 +125,113 @@ export function CourseCatalog({
   }
 
   return (
-    <div className="space-y-4 sm:space-y-8">
-      <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50/80 to-indigo-50/60 px-3 py-3 shadow-sm sm:px-6 sm:py-6">
-        <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="min-w-0 max-w-2xl">
-            <div className="flex items-baseline justify-between gap-3 sm:block">
-              <h1 className="text-lg font-bold tracking-tight text-slate-900 sm:text-2xl">
-                Course catalog
-              </h1>
-              <p className="shrink-0 text-[11px] font-medium text-slate-500 sm:hidden">{countLabel}</p>
-            </div>
-            <p className="hidden text-sm leading-relaxed text-slate-600 sm:mt-1 sm:block sm:text-base">
-              Browse by department, search, and open a course. Results load in pages for speed.
-            </p>
-            <p className="hidden text-xs font-medium text-slate-500 sm:mt-1 sm:block sm:text-sm">
-              {countLabel}
-            </p>
-          </div>
+    <div className="space-y-5">
+      <Link
+        href="/dashboard"
+        className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 transition-colors hover:text-blue-600"
+      >
+        <ChevronLeft className="h-3.5 w-3.5" />
+        Back to Home
+      </Link>
 
-          <form
-            className="flex w-full flex-col gap-2 sm:flex-row sm:items-end sm:gap-3 lg:max-w-xl"
-            onSubmit={(e) => {
-              e.preventDefault()
-              navigate(1, draftQ, draftDepartmentId)
-            }}
-          >
-            <div className="min-w-0 flex-1">
-              <label htmlFor="course-catalog-search" className="sr-only">
-                Search courses
-              </label>
-              <div className="relative">
-                <Search
-                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-                  aria-hidden
-                />
-                <input
-                  id="course-catalog-search"
-                  type="search"
-                  inputMode="search"
-                  autoComplete="off"
-                  enterKeyHint="search"
-                  placeholder="Search title, code…"
-                  value={draftQ}
-                  onChange={(e) => setDraftQ(e.target.value)}
-                  className="min-h-12 w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-10 text-sm text-slate-900 shadow-inner placeholder:text-slate-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 sm:min-h-11"
-                />
-                {draftQ ? (
-                  <button
-                    type="button"
-                    aria-label="Clear search"
-                    onClick={() => setDraftQ('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-                  >
-                    <X className="h-4 w-4" aria-hidden />
-                  </button>
-                ) : null}
-              </div>
-            </div>
-            <div className="flex gap-2 sm:gap-3">
-              <div className="min-w-0 flex-1 sm:w-44 sm:flex-initial">
-                <label htmlFor="course-catalog-dept" className="sr-only">
-                  Department
-                </label>
-                <select
-                  id="course-catalog-dept"
-                  value={draftDepartmentId}
-                  onChange={(e) => {
-                    const next = e.target.value
-                    setDraftDepartmentId(next)
-                    navigate(1, draftQ, next)
-                  }}
-                  className="min-h-12 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 sm:min-h-11"
-                >
-                  <option value="">All departments</option>
-                  {departments.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+      <PageHeader
+        title="Course catalog"
+        description="Browse by department, search, and open a course. Results load in pages for speed."
+        action={
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+            <BookOpen className="h-3.5 w-3.5" />
+            {totalCount} {totalCount === 1 ? 'course' : 'courses'}
+          </span>
+        }
+      />
+
+      <form
+        className="flex w-full flex-col gap-2 sm:flex-row sm:items-end sm:gap-3"
+        onSubmit={(e) => {
+          e.preventDefault()
+          navigate(1, draftQ, draftDepartmentId)
+        }}
+      >
+        <div className="min-w-0 flex-1">
+          <label htmlFor="course-catalog-search" className="sr-only">
+            Search courses
+          </label>
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+              aria-hidden
+            />
+            <input
+              id="course-catalog-search"
+              type="search"
+              inputMode="search"
+              autoComplete="off"
+              enterKeyHint="search"
+              placeholder="Search title, code…"
+              value={draftQ}
+              onChange={(e) => setDraftQ(e.target.value)}
+              className="min-h-12 w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-10 text-sm text-slate-900 shadow-inner placeholder:text-slate-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 sm:min-h-11"
+            />
+            {draftQ ? (
               <button
-                type="submit"
-                disabled={pending}
-                aria-label="Apply search"
-                className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl border border-blue-600 bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60 sm:min-h-11"
+                type="button"
+                aria-label="Clear search"
+                onClick={() => setDraftQ('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
               >
-                <Search className="h-4 w-4 sm:hidden" aria-hidden />
-                <span className="hidden sm:inline">{pending ? 'Applying…' : 'Apply'}</span>
+                <X className="h-4 w-4" aria-hidden />
               </button>
-              {filtersActive ? (
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => {
-                    setDraftQ('')
-                    setDraftDepartmentId('')
-                    navigate(1, '', '')
-                  }}
-                  className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 sm:min-h-11 sm:px-4"
-                >
-                  Clear
-                </button>
-              ) : null}
-            </div>
-          </form>
+            ) : null}
+          </div>
         </div>
-      </section>
+        <div className="flex gap-2 sm:gap-3">
+          <div className="min-w-0 flex-1 sm:w-44 sm:flex-initial">
+            <label htmlFor="course-catalog-dept" className="sr-only">
+              Department
+            </label>
+            <select
+              id="course-catalog-dept"
+              value={draftDepartmentId}
+              onChange={(e) => {
+                const next = e.target.value
+                setDraftDepartmentId(next)
+                navigate(1, draftQ, next)
+              }}
+              className="min-h-12 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 sm:min-h-11"
+            >
+              <option value="">All departments</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="submit"
+            disabled={pending}
+            aria-label="Apply search"
+            className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl border border-blue-600 bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60 sm:min-h-11"
+          >
+            <Search className="h-4 w-4 sm:hidden" aria-hidden />
+            <span className="hidden sm:inline">{pending ? 'Applying…' : 'Apply'}</span>
+          </button>
+          {filtersActive ? (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                setDraftQ('')
+                setDraftDepartmentId('')
+                navigate(1, '', '')
+              }}
+              className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 sm:min-h-11 sm:px-4"
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
+      </form>
 
       {totalCount === 0 ? (
         initialQ.trim() || initialDepartmentId ? (

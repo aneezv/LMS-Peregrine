@@ -20,7 +20,7 @@ export default function UnauthorizedPage() {
           href="/dashboard"
           className="inline-flex"
         >
-          <AppButton>Back to Dashboard</AppButton>
+          <AppButton>Back to Home</AppButton>
         </Link>
       </AppCard>
     </div>

@@ -11,7 +11,7 @@ export default function AdminUsersPage() {
           This section is under construction. Full role assignment, account controls, and audit logs will appear here.
         </p>
         <Link href="/dashboard" className="mt-5 inline-flex">
-          <AppButton>Back to Dashboard</AppButton>
+          <AppButton>Back to Home</AppButton>
         </Link>
       </AppCard>
     </div>
