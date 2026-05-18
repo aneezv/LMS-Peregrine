@@ -2,9 +2,11 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
 import { Menu } from 'lucide-react'
 import { iconFor, type NavItem } from '@/components/DashboardNavDrawer'
 import { useNavDrawer } from '@/lib/stores/navDrawer'
+import { queryKeys } from '@/lib/query/query-keys'
 import { cn } from '@/lib/utils'
 
 // NOTE: this bar is `fixed bottom-0`. The internship timer widget
@@ -30,7 +32,18 @@ function activeHref(pathname: string, items: NavItem[]): string | null {
 export default function BottomNav({ items }: { items: NavItem[] }) {
   const pathname = usePathname()
   const setOpen = useNavDrawer((s) => s.setOpen)
+  const quizInProgress = useQuery({
+    queryKey: queryKeys.quizInProgress(),
+    queryFn: () => false,
+    initialData: false,
+    enabled: false,
+    staleTime: Infinity,
+  }).data
   const active = activeHref(pathname, items)
+
+  // Hide while a quiz is being taken — the quiz renders its own fixed bottom
+  // submit bar at the same position, which this would otherwise overlap.
+  if (quizInProgress) return null
 
   const cellClass =
     'flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium [&_svg]:size-5'
