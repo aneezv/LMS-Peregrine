@@ -8,6 +8,7 @@ import ContinueLearning from './ContinueLearning'
 import DueAssignmentRow from './DueAssignmentRow'
 
 const DUE_ASSIGNMENTS_HREF = '/dashboard/due-assignments'
+const STREAK_HREF = '/dashboard/streak'
 
 export default function LearnerDashboard({
   name,
@@ -28,6 +29,7 @@ export default function LearnerDashboard({
       icon: <Flame className="w-12.5 h-12.5 text-orange-500" />,
       bg: 'bg-orange-50',
       hint: streak === 0 ? 'Complete a lesson to start' : undefined,
+      href: STREAK_HREF,
     },
     {
       label: 'Assignments Due',

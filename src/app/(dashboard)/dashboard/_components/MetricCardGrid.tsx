@@ -8,7 +8,7 @@ export default function MetricCardGrid({ metrics }: { metrics: MetricCard[] }) {
       {metrics.map((m) => {
         const card = (
           <AppCard
-            className={`relative overflow-hidden p-5 flex flex-row justify-between gap-4 rounded-2xl ${
+            className={`relative h-full overflow-hidden p-5 flex flex-row justify-between gap-4 rounded-2xl ${
               m.href
                 ? 'transition-all hover:shadow-md hover:border-blue-300 hover:-translate-y-0.5 cursor-pointer'
                 : ''
@@ -30,11 +30,13 @@ export default function MetricCardGrid({ metrics }: { metrics: MetricCard[] }) {
         )
 
         return m.href ? (
-          <Link key={m.label} href={m.href} className="block">
+          <Link key={m.label} href={m.href} className="block h-full">
             {card}
           </Link>
         ) : (
-          <div key={m.label}>{card}</div>
+          <div key={m.label} className="h-full">
+            {card}
+          </div>
         )
       })}
     </div>
