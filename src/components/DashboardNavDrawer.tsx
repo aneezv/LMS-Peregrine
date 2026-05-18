@@ -19,6 +19,7 @@ import {
   QrCode,
   ScanLine,
   ScanSearch,
+  Settings,
   Tag,
   UserCheck,
   UserPlus,
@@ -54,6 +55,7 @@ export type NavItem = {
     | 'addInstructor'
     | 'coupons'
     | 'streak'
+    | 'settings'
 }
 
 export type NavLinkSections = NavItem[][]
@@ -94,6 +96,8 @@ export function iconFor(icon: NavItem['icon']) {
       return <Tag className="h-4 w-4" />
     case 'streak':
       return <Flame className="h-4 w-4" />
+    case 'settings':
+      return <Settings className="h-4 w-4" />
     case 'aiExternal':
       return <Sparkles className="h-4 w-4" />
     default:

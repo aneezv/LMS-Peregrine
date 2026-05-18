@@ -47,6 +47,7 @@ export default async function DashboardLayout({
           },
         ],
         [{ href: '/grading', label: 'Grading', icon: 'grading' }],
+        [{ href: '/dashboard/settings', label: 'Settings', icon: 'settings' }],
         [{ href: PEREGRINE_AI_HREF, label: 'Peregrine AI', icon: 'aiExternal', external: true }],
       ]
     : [
@@ -75,6 +76,7 @@ export default async function DashboardLayout({
         ],
         [
           ...(isInstructor ? [{ href: '/admin/internship', label: 'Session Logs', icon: 'internship' as const }] : []),
+          { href: '/dashboard/settings', label: 'Settings', icon: 'settings' as const },
           { href: PEREGRINE_AI_HREF, label: 'Peregrine AI', icon: 'aiExternal', external: true },
         ],
       ]
