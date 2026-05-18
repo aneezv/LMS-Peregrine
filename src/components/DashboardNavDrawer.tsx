@@ -10,6 +10,7 @@ import {
   Clock,
   FileSpreadsheet,
   FileUp,
+  GraduationCap,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -34,6 +35,7 @@ export type NavItem = {
   icon:
     | 'dashboard'
     | 'courses'
+    | 'myCourses'
     | 'grading'
     | 'attendance'
     | 'attendanceReport'
@@ -91,6 +93,8 @@ export default function DashboardNavDrawer({
         return <LayoutDashboard className="h-4 w-4" />
       case 'courses':
         return <BookOpen className="h-4 w-4" />
+      case 'myCourses':
+        return <GraduationCap className="h-4 w-4" />
       case 'grading':
         return <ClipboardCheck className="h-4 w-4" />
       case 'attendance':

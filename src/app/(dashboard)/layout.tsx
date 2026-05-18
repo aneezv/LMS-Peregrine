@@ -49,7 +49,8 @@ export default async function DashboardLayout({
     : [
         [
           { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-          { href: '/courses', label: isInstructor ? 'All Courses' : 'My Courses', icon: 'courses' },
+          { href: '/courses', label: isInstructor ? 'All Courses' : 'Course Catalog', icon: 'courses' },
+          ...(!isInstructor ? [{ href: '/dashboard/my-courses', label: 'My Courses', icon: 'myCourses' as const }] : []),
           ...(isInstructor ? [{ href: '/grading', label: 'Grading', icon: 'grading' as const }] : []),
         ],
         [
