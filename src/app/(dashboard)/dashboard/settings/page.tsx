@@ -91,6 +91,7 @@ export default async function SettingsPage() {
         'id, amount_paise, original_amount_paise, discount_paise, currency, status, created_at, courses(course_code, title)',
       )
       .eq('user_id', user.id)
+      .eq('status', 'paid')
       .order('created_at', { ascending: false })
 
     payments = ((payRows ?? []) as PaymentRow[]).map((p) => {

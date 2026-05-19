@@ -16,12 +16,6 @@ export type Payment = {
   course_code: string | null
 }
 
-const STATUS_BADGE: Record<Payment['status'], string> = {
-  paid: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-  created: 'bg-amber-50 text-amber-700 border-amber-100',
-  failed: 'bg-red-50 text-red-700 border-red-100',
-}
-
 function formatMoney(paise: number, currency = 'INR') {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -52,22 +46,15 @@ function Row({ p }: { p: Payment }) {
           {formatDate(p.created_at)}
         </p>
       </div>
-      <div className="flex items-center gap-3">
-        <div className="text-right">
-          <p className="text-sm font-bold text-slate-900">
-            {formatMoney(p.amount_paise, p.currency)}
+      <div className="text-right">
+        <p className="text-sm font-bold text-slate-900">
+          {formatMoney(p.amount_paise, p.currency)}
+        </p>
+        {showOriginal ? (
+          <p className="text-xs text-slate-400 line-through">
+            {formatMoney(p.original_amount_paise!, p.currency)}
           </p>
-          {showOriginal ? (
-            <p className="text-xs text-slate-400 line-through">
-              {formatMoney(p.original_amount_paise!, p.currency)}
-            </p>
-          ) : null}
-        </div>
-        <span
-          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold capitalize ${STATUS_BADGE[p.status]}`}
-        >
-          {p.status}
-        </span>
+        ) : null}
       </div>
     </li>
   )

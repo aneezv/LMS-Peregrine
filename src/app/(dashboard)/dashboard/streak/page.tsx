@@ -149,12 +149,6 @@ export default async function StreakPage() {
       <PageHeader
         title="Your Streak"
         description="Every lesson, quiz, feedback, and graded assignment keeps your streak alive."
-        action={
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-3 py-1 text-xs font-bold text-orange-700 border border-orange-100">
-            <Flame className="w-3.5 h-3.5" />
-            {detail.current_streak} day{detail.current_streak === 1 ? '' : 's'}
-          </span>
-        }
       />
 
       {!detail.last_active_day ? (
@@ -172,7 +166,7 @@ export default async function StreakPage() {
         />
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <StatCard
               label="Current streak"
               value={`${detail.current_streak} day${detail.current_streak === 1 ? '' : 's'}`}
