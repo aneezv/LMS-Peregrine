@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { createPortal } from 'react-dom'
 import {
   BarChart3,
+  Bell,
   BookOpen,
   ClipboardCheck,
   Clock,
@@ -56,6 +57,7 @@ export type NavItem = {
     | 'coupons'
     | 'streak'
     | 'settings'
+    | 'notifications'
 }
 
 export type NavLinkSections = NavItem[][]
@@ -98,6 +100,8 @@ export function iconFor(icon: NavItem['icon']) {
       return <Flame className="h-4 w-4" />
     case 'settings':
       return <Settings className="h-4 w-4" />
+    case 'notifications':
+      return <Bell className="h-4 w-4" />
     case 'aiExternal':
       return <Sparkles className="h-4 w-4" />
     default:

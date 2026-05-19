@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { DashboardLearnerWidgets } from '@/components/internship/DashboardLearnerWidgets'
 import { LogOut, Sparkles } from 'lucide-react'
 import DashboardNavDrawer, { type NavLinkSections } from '@/components/DashboardNavDrawer'
+import NotificationBell from '@/components/notifications/NotificationBell'
 import BottomNav from '@/components/BottomNav'
 import { LEARNER_PRIMARY_NAV } from '@/lib/nav'
 import { ROLES, isInstructorRole } from '@/lib/roles'
@@ -37,7 +38,10 @@ export default async function DashboardLayout({
 
   const navSections: NavLinkSections = isCardCoordinator
     ? [
-        [{ href: '/dashboard', label: 'Home', icon: 'dashboard' }],
+        [
+          { href: '/dashboard', label: 'Home', icon: 'dashboard' },
+          { href: '/dashboard/notifications', label: 'Notifications', icon: 'notifications' },
+        ],
         [
           { href: '/attendance/bind-cards', label: 'Bind ID Cards', icon: 'bindIdCards' },
           {
@@ -53,6 +57,7 @@ export default async function DashboardLayout({
     : [
         [
           { href: '/dashboard', label: 'Home', icon: 'dashboard' },
+          { href: '/dashboard/notifications', label: 'Notifications', icon: 'notifications' },
           { href: '/courses', label: isInstructor ? 'All Courses' : 'Course Catalog', icon: 'courses' },
           ...(!isInstructor ? [{ href: '/dashboard/my-courses', label: 'My Courses', icon: 'myCourses' as const }] : []),
           ...(isInstructor ? [{ href: '/grading', label: 'Grading', icon: 'grading' as const }] : []),
@@ -101,6 +106,7 @@ export default async function DashboardLayout({
             </div>
 
             <div className="flex items-center gap-3">
+              <NotificationBell />
               <div className="hidden sm:flex flex-col items-end">
                 <span className="text-sm font-semibold text-slate-800">{name}</span>
                 <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${

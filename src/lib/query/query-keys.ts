@@ -9,4 +9,8 @@ export const queryKeys = {
   quizInProgress: () => ['quiz', 'in-progress'] as const,
   feedbackStatus: (params: { moduleId: string }) =>
     ['feedback', 'status', params] as const,
+  notifications: {
+    list: () => ['notifications', 'list'] as const,
+    unreadCount: () => ['notifications', 'unread-count'] as const,
+  },
 }
