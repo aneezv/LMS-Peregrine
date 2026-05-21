@@ -51,12 +51,21 @@ export default async function SignupPage({
               <div className="flex items-center justify-center rounded-md">
                 <Image src="/logo.png" alt="Peregrine LMS Logo" width={45} height={45} />
               </div>
-              <CardTitle className="text-xl">Create your account</CardTitle>
+              <CardTitle className="text-xl">Create a new account</CardTitle>
               <CardDescription>
                 Sign up to enroll in courses and start learning.
               </CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="mb-5 flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                <span className="text-slate-700">Already have an account?</span>
+                <Link
+                  href={loginHref}
+                  className="shrink-0 font-semibold text-primary underline-offset-4 hover:underline"
+                >
+                  Sign in &rarr;
+                </Link>
+              </div>
               <form action={signup}>
                 <input type="hidden" name="redirect" value={redirectTo} />
                 <FieldGroup>
@@ -105,13 +114,6 @@ export default async function SignupPage({
                   <Field>
                     <SignupSubmitButton />
                   </Field>
-
-                  <p className="text-center text-sm text-muted-foreground">
-                    Already have an account?{' '}
-                    <Link href={loginHref} className="font-medium text-primary underline-offset-4 hover:underline">
-                      Sign in
-                    </Link>
-                  </p>
                 </FieldGroup>
               </form>
             </CardContent>

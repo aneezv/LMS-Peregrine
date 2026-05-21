@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { unwrapSingle, type CatalogCourse } from '@/lib/catalog-courses'
-import { HomeNavbar } from '@/components/home/HomeNavbar'
+import { SiteNavbar } from '@/components/site/SiteNavbar'
 import { HeroSection } from '@/components/home/HeroSection'
 import { FeaturedCourses } from '@/components/home/FeaturedCourses'
 import { FeaturesSection } from '@/components/home/FeaturesSection'
@@ -43,7 +43,7 @@ export default async function Home() {
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
-      <HomeNavbar />
+      <SiteNavbar />
       <main className="flex-1">
         <HeroSection />
         <FeaturedCourses courses={courses} />

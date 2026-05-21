@@ -34,8 +34,25 @@ export async function signup(formData: FormData) {
     options: { data: { full_name: fullName, role: 'learner' } },
   })
 
+  function redirectToLoginAsExisting(): never {
+    redirect(
+      `/login?notice=email_exists&email=${encodeURIComponent(email)}&redirect=${encodeURIComponent(redirectTo)}`,
+    )
+  }
+
   if (error) {
+    const code = (error as { code?: string }).code
+    const isDuplicate =
+      code === 'user_already_exists' ||
+      code === 'email_exists' ||
+      /already.{0,15}(registered|exists)/i.test(error.message)
+    if (isDuplicate) redirectToLoginAsExisting()
     fail(error.message)
+  }
+
+  const identities = (data.user as { identities?: unknown[] } | null)?.identities
+  if (Array.isArray(identities) && identities.length === 0) {
+    redirectToLoginAsExisting()
   }
 
   const admin = createAdminClient()

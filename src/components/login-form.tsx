@@ -23,12 +23,14 @@ import { ErrorAlert } from "@/components/ui/error-alert"
 interface LoginFormProps extends React.ComponentProps<"div"> {
   errorMessage?: string | null
   redirectTo?: string
+  prefillEmail?: string
 }
 
 export function LoginForm({
   className,
   errorMessage,
   redirectTo,
+  prefillEmail,
   ...props
 }: LoginFormProps) {
   const signupHref = redirectTo
@@ -42,12 +44,21 @@ export function LoginForm({
           <div className="flex items-center justify-center rounded-md">
             <Image src="/logo.png" alt="Peregrine LMS Logo" width={45} height={45} />
           </div>
-          <CardTitle className="text-xl">Welcome back</CardTitle>
+          <CardTitle className="text-xl">Sign in to your account</CardTitle>
           <CardDescription>
-            Login with your email address and password to access your account.
+            Use your email and password to continue.
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-5 flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm">
+            <span className="text-slate-700">New here?</span>
+            <Link
+              href={signupHref}
+              className="shrink-0 font-semibold text-primary underline-offset-4 hover:underline"
+            >
+              Create an account &rarr;
+            </Link>
+          </div>
           <form action={login}>
             <input type="hidden" name="redirect" value={redirectTo ?? ''} />
             <FieldGroup>
@@ -61,6 +72,8 @@ export function LoginForm({
                   name="email"
                   type="email"
                   placeholder="learner@gmail.com"
+                  defaultValue={prefillEmail ?? ''}
+                  autoFocus={!prefillEmail}
                   required
                 />
               </Field>
@@ -70,19 +83,13 @@ export function LoginForm({
                   id="password"
                   name="password"
                   type="password"
+                  autoFocus={!!prefillEmail}
                   required
                 />
               </Field>
               <Field>
                 <LoginSubmitButton />
               </Field>
-
-              <p className="text-center text-sm text-muted-foreground">
-                Don&apos;t have an account?{' '}
-                <Link href={signupHref} className="font-medium text-primary underline-offset-4 hover:underline">
-                  Create one
-                </Link>
-              </p>
             </FieldGroup>
           </form>
         </CardContent>
