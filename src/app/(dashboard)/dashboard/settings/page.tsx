@@ -8,6 +8,7 @@ import { ROLES } from '@/lib/roles'
 import EditProfileModal from './_components/EditProfileModal'
 import ChangePasswordModal from './_components/ChangePasswordModal'
 import PurchaseHistoryList, { type Payment } from './_components/PurchaseHistoryList'
+import InstallAppCard from './_components/InstallAppCard'
 
 type PaymentCourse = { course_code: string; title: string }
 
@@ -188,6 +189,9 @@ export default async function SettingsPage() {
           <PurchaseHistoryList payments={payments} />
         </AppCard>
       ) : null}
+
+      {/* Install app */}
+      <InstallAppCard />
 
       {/* Sign out */}
       <AppCard className="p-4 sm:p-6">
