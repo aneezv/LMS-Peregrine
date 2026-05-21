@@ -15,7 +15,7 @@ export function HeroSection() {
         </p>
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
           <Link
-            href="/courses"
+            href="/explore"
             className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-700 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
           >
             Browse Courses
@@ -25,7 +25,7 @@ export function HeroSection() {
             href="/signup"
             className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
           >
-            Create Account
+            Get started
           </Link>
         </div>
       </div>

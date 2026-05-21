@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { CourseCatalog } from '@/components/courses/course-catalog'
 import { fetchCatalogPage, fetchDepartmentsForCatalog } from '@/lib/catalog-courses'
@@ -25,14 +26,21 @@ export default async function CoursesPage({
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  const { data: viewerProfile } = user
-    ? await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
-    : { data: null as { role: string } | null }
+
+  if (!user) {
+    redirect('/login?redirect=/courses')
+  }
+
+  const { data: viewerProfile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle()
 
   const seesAllCatalog = isInstructorRole(viewerProfile?.role)
 
   const enrolledIds: string[] = []
-  if (!seesAllCatalog && user) {
+  if (!seesAllCatalog) {
     const { data: ens } = await supabase
       .from('enrollments')
       .select('course_id')

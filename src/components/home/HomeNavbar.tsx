@@ -21,13 +21,15 @@ export function HomeNavbar() {
           </Link>
 
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+            <Button variant="ghost" size="sm" asChild className="hidden px-2 sm:inline-flex sm:px-3">
+              <Link href="/explore">Explore</Link>
+            </Button>
             <Button variant="ghost" size="sm" asChild className="px-2 sm:px-3">
               <Link href="/login">Sign in</Link>
             </Button>
             <Button size="sm" asChild className="px-3 sm:px-4">
-              <Link href="/signup" aria-label="Create account">
-                <span className="sm:hidden">Sign up</span>
-                <span className="hidden sm:inline">Create Account</span>
+              <Link href="/signup" aria-label="Get started with Peregrine">
+                Get started
               </Link>
             </Button>
           </div>

@@ -6,34 +6,17 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { BookOpen, ChevronLeft, Search, X } from 'lucide-react'
 import { EmptyState, PageHeader } from '@/components/ui/primitives'
-import { CATALOG_PAGE_SIZE, type CatalogCourse, type CatalogDepartment } from '@/lib/catalog-courses'
+import {
+  CATALOG_PAGE_SIZE,
+  groupCatalogByDepartment,
+  type CatalogCourse,
+  type CatalogDepartment,
+} from '@/lib/catalog-courses'
 import { queryKeys } from '@/lib/query/query-keys'
 import { CourseCard } from '@/components/courses/CourseCard'
 
 export type { CatalogCourse, CatalogDepartment } from '@/lib/catalog-courses'
-
-export function groupCatalogByDepartment(courses: CatalogCourse[]) {
-  const map = new Map<
-    string,
-    { department: CatalogDepartment | null; courses: CatalogCourse[] }
-  >()
-  for (const c of courses) {
-    const d = c.department
-    const key = d?.id ?? '_none'
-    if (!map.has(key)) {
-      map.set(key, { department: d, courses: [] })
-    }
-    map.get(key)!.courses.push(c)
-  }
-  const sections = [...map.values()]
-  sections.sort((a, b) => {
-    const ao = a.department?.sort_order ?? 9999
-    const bo = b.department?.sort_order ?? 9999
-    if (ao !== bo) return ao - bo
-    return (a.department?.name ?? '').localeCompare(b.department?.name ?? '')
-  })
-  return sections
-}
+export { groupCatalogByDepartment } from '@/lib/catalog-courses'
 
 
 export function CourseCatalog({

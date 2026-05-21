@@ -24,5 +24,21 @@ export default function manifest(): MetadataRoute.Manifest {
         purpose: "any",
       },
     ],
+    screenshots: [
+      {
+        src: "/screenshots/desktop.png",
+        sizes: "1898x910",
+        type: "image/png",
+        form_factor: "wide",
+        label: "Peregrine LMS dashboard on desktop",
+      },
+      {
+        src: "/screenshots/mobile.png",
+        sizes: "448x800",
+        type: "image/png",
+        form_factor: "narrow",
+        label: "Peregrine LMS dashboard on mobile",
+      },
+    ],
   };
 }

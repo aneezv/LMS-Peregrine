@@ -39,7 +39,7 @@ export function FeaturedCourses({ courses }: { courses: CatalogCourse[] }) {
           </div>
 
           <Link
-            href="/courses"
+            href="/explore"
             className="group inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
           >
             View all courses
@@ -62,7 +62,7 @@ export function FeaturedCourses({ courses }: { courses: CatalogCourse[] }) {
         {/* Bottom CTA — softer, mobile-friendly */}
         <div className="mt-12 flex justify-center">
           <Link
-            href="/courses"
+            href="/explore"
             className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700 transition hover:text-emerald-800"
           >
             Explore the full catalog

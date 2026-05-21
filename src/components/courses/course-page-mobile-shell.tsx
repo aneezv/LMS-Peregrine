@@ -15,6 +15,8 @@ type Props = {
   completionBadge?: ReactNode
   /** Fixed above the safe area on small screens (e.g. primary CTA). Hidden at `xl`. */
   stickyBottomBar?: ReactNode
+  /** When true, lift the sticky bar above the learner BottomNav (~3.5rem + safe-area). */
+  liftAboveBottomNav?: boolean
 }
 
 /**
@@ -29,6 +31,7 @@ export function CoursePageMobileShell({
   defaultTab = 'overview',
   completionBadge,
   stickyBottomBar,
+  liftAboveBottomNav = false,
 }: Props) {
   return (
     <>
@@ -36,7 +39,9 @@ export function CoursePageMobileShell({
       className={cn(
         'lg:hidden',
         stickyBottomBar
-          ? 'pb-[calc(6rem+env(safe-area-inset-bottom,0px))]'
+          ? liftAboveBottomNav
+            ? 'pb-[calc(9.25rem+env(safe-area-inset-bottom,0px))]'
+            : 'pb-[calc(6rem+env(safe-area-inset-bottom,0px))]'
           : 'pb-6',
       )}
     >
@@ -80,7 +85,12 @@ export function CoursePageMobileShell({
 
     {stickyBottomBar ? (
       <div
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md supports-[backdrop-filter]:bg-background/80 lg:hidden"
+        className={cn(
+          'fixed inset-x-0 z-40 border-t border-border bg-background/95 px-4 pt-3 backdrop-blur-md supports-[backdrop-filter]:bg-background/80 lg:hidden',
+          liftAboveBottomNav
+            ? 'bottom-[calc(3.25rem+env(safe-area-inset-bottom,0px))] pb-3'
+            : 'bottom-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]',
+        )}
         role="region"
         aria-label="Course actions"
       >

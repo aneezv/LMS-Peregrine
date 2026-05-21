@@ -126,6 +126,29 @@ export async function fetchCatalogPage(
   }
 }
 
+export function groupCatalogByDepartment(courses: CatalogCourse[]) {
+  const map = new Map<
+    string,
+    { department: CatalogDepartment | null; courses: CatalogCourse[] }
+  >()
+  for (const c of courses) {
+    const d = c.department
+    const key = d?.id ?? '_none'
+    if (!map.has(key)) {
+      map.set(key, { department: d, courses: [] })
+    }
+    map.get(key)!.courses.push(c)
+  }
+  const sections = [...map.values()]
+  sections.sort((a, b) => {
+    const ao = a.department?.sort_order ?? 9999
+    const bo = b.department?.sort_order ?? 9999
+    if (ao !== bo) return ao - bo
+    return (a.department?.name ?? '').localeCompare(b.department?.name ?? '')
+  })
+  return sections
+}
+
 export async function fetchDepartmentsForCatalog(
   supabase: SupabaseClient,
 ): Promise<CatalogDepartment[]> {

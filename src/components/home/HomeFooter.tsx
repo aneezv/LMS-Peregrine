@@ -25,14 +25,14 @@ export function HomeFooter() {
               <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 Explore
               </p>
-              <Link href="/courses" className="text-sm text-slate-400 transition hover:text-slate-200">
+              <Link href="/explore" className="text-sm text-slate-400 transition hover:text-slate-200">
                 Courses
               </Link>
               <Link href="/login" className="text-sm text-slate-400 transition hover:text-slate-200">
                 Sign in
               </Link>
               <Link href="/signup" className="text-sm text-slate-400 transition hover:text-slate-200">
-                Create account
+                Get started
               </Link>
             </div>
 

@@ -440,6 +440,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
           />
           ) : undefined
         }
+        liftAboveBottomNav={isAuthenticated && !isCourseStaff}
       />
 
       <div className="mx-auto hidden w-full max-w-7xl flex-col gap-6 lg:grid lg:max-w-none lg:grid-cols-[minmax(0,1fr)_minmax(260px,22rem)] lg:items-start lg:gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(280px,26rem)] xl:gap-8">
