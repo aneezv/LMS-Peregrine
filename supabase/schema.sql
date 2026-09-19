@@ -85,6 +85,7 @@ create table public.courses (
   status              course_status not null default 'draft',
   enrollment_type     enrollment_type not null default 'open',
   thumbnail_url       text,
+  demo_video_url      text,
   starts_at           timestamptz,
   price               numeric(10,2) not null default 0,
   discount_percent    smallint not null default 0

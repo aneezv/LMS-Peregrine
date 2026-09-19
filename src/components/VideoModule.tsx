@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { VolumeX } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import './VideoModule.plyr.css'
@@ -10,32 +11,22 @@ import { queryKeys } from '@/lib/query/query-keys'
 const END_SECONDS_THRESHOLD = 10
 const VEIL_FADE_OUT_MS = 480
 
-interface VideoModuleProps {
-  moduleId: string
+export interface VideoModuleProps {
+  moduleId?: string
   contentUrl: string
+  className?: string
+  autoplay?: boolean
 }
 
-function extractYouTubeId(url: string): string | null {
-  const patterns = [
-    /youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/,
-    /youtu\.be\/([a-zA-Z0-9_-]{11})/,
-    /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
-  ]
-  for (const pattern of patterns) {
-    const match = url.match(pattern)
-    if (match) return match[1]
-  }
-  return null
-}
+import {
+  extractYouTubeId,
+  extractVimeoId,
+  isValidDemoVideoUrl,
+  isProbablyDirectVideo,
+} from '@/lib/video-url'
 
-function extractVimeoId(url: string): string | null {
-  const match = url.match(/vimeo\.com\/(\d+)/)
-  return match ? match[1] : null
-}
+export { extractYouTubeId, extractVimeoId, isValidDemoVideoUrl, isProbablyDirectVideo }
 
-function isProbablyDirectVideo(url: string): boolean {
-  return /\.(mp4|webm|ogg)(\?|$)/i.test(url.trim())
-}
 
 type SupportedOrientationLock = 'any' | 'natural' | 'landscape' | 'portrait' | 'portrait-primary' | 'portrait-secondary' | 'landscape-primary' | 'landscape-secondary'
 
@@ -90,9 +81,20 @@ async function markVideoCompleteOnce(moduleId: string, doneRef: { current: boole
   }
 }
 
-export default function VideoModule({ moduleId, contentUrl }: VideoModuleProps) {
+export default function VideoModule({
+  moduleId,
+  contentUrl,
+  className = '',
+  autoplay = false,
+}: VideoModuleProps) {
   const queryClient = useQueryClient()
   const embedRef = useRef<HTMLDivElement>(null)
+  const directVideoRef = useRef<HTMLVideoElement>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const playerRef = useRef<any>(null)
+  const desiredMutedRef = useRef<boolean>(Boolean(autoplay))
+  const [isMuted, setIsMuted] = useState(Boolean(autoplay))
+
   const ytId = extractYouTubeId(contentUrl)
   const vimeoId = !ytId ? extractVimeoId(contentUrl) : null
   const direct = !ytId && !vimeoId && isProbablyDirectVideo(contentUrl)
@@ -137,6 +139,7 @@ export default function VideoModule({ moduleId, contentUrl }: VideoModuleProps) 
   }, [showVeil, blackOverlay])
 
   const onReachEnd = useCallback(() => {
+    if (!moduleId) return
     const run = async () => {
       const completed = await markVideoCompleteOnce(moduleId, doneRef)
       if (completed) {
@@ -150,6 +153,40 @@ export default function VideoModule({ moduleId, contentUrl }: VideoModuleProps) 
     }
     void run()
   }, [moduleId, queryClient])
+
+  const handleToggleMute = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+
+    if (playerRef.current) {
+      try {
+        const currentMuted = Boolean(playerRef.current.muted)
+        const targetMuted = !currentMuted
+        desiredMutedRef.current = targetMuted
+        playerRef.current.muted = targetMuted
+        if (!targetMuted) {
+          const vol = Number(playerRef.current.volume)
+          if (!Number.isFinite(vol) || vol <= 0) {
+            playerRef.current.volume = 1
+          }
+        }
+        setIsMuted(targetMuted)
+      } catch (err) {
+        console.warn('Could not toggle mute on player:', err)
+      }
+    } else if (directVideoRef.current) {
+      const targetMuted = !directVideoRef.current.muted
+      desiredMutedRef.current = targetMuted
+      directVideoRef.current.muted = targetMuted
+      if (!targetMuted && directVideoRef.current.volume === 0) {
+        directVideoRef.current.volume = 1
+      }
+      setIsMuted(targetMuted)
+    } else {
+      desiredMutedRef.current = !desiredMutedRef.current
+      setIsMuted(desiredMutedRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     if (!provider || !embedId || !embedRef.current) return
@@ -165,6 +202,7 @@ export default function VideoModule({ moduleId, contentUrl }: VideoModuleProps) 
       if (cancelled || !player?.elements) return
       setPaused(Boolean(player.paused))
       setEnded(Boolean(player.ended))
+      setIsMuted(Boolean(player.muted))
     }
 
     const lockIframe = () => {
@@ -181,8 +219,12 @@ export default function VideoModule({ moduleId, contentUrl }: VideoModuleProps) 
       const { default: Plyr } = await import('plyr')
       if (cancelled || !embedRef.current) return
 
+      const initialMuted = desiredMutedRef.current
+
       player = new Plyr(el, {
         ratio: '16:9',
+        autoplay: Boolean(autoplay),
+        muted: initialMuted,
         fullscreen: {
           enabled: true,
           fallback: true,
@@ -194,6 +236,8 @@ export default function VideoModule({ moduleId, contentUrl }: VideoModuleProps) 
           iv_load_policy: 3,
           customControls: true,
           controls: 0,
+          autoplay: autoplay ? 1 : 0,
+          mute: initialMuted ? 1 : 0,
         },
         vimeo: {
           byline: false,
@@ -201,19 +245,32 @@ export default function VideoModule({ moduleId, contentUrl }: VideoModuleProps) 
           title: false,
           speed: true,
           customControls: true,
+          autoplay: Boolean(autoplay),
+          muted: initialMuted,
         },
       })
+      playerRef.current = player
+
       if (cancelled) {
         try { player.destroy() } catch { /* noop */ }
         return
       }
 
+      player.on('ready', () => {
+        if (cancelled) return
+        setIsMuted(Boolean(player.muted))
+      })
+      player.on('volumechange', () => {
+        if (cancelled) return
+        setIsMuted(Boolean(player.muted))
+      })
       player.on('playing', () => {
         if (cancelled) return
         const c = player.elements?.container as HTMLElement | null
         c?.classList.add('video-module-embed-ready')
         setEmbedReady(true)
         setWaiting(false)
+        setIsMuted(Boolean(player.muted))
         syncState()
       })
       player.on('pause', () => { if (!cancelled) syncState() })
@@ -252,8 +309,14 @@ export default function VideoModule({ moduleId, contentUrl }: VideoModuleProps) 
         }
       })
 
+      const syncPoll = () => {
+        lockIframe()
+        if (player) {
+          setIsMuted(Boolean(player.muted))
+        }
+      }
       lockIframe()
-      pollId = window.setInterval(lockIframe, 200)
+      pollId = window.setInterval(syncPoll, 200)
 
       const containerEl = player.elements?.container as HTMLElement | null
       if (containerEl) {
@@ -264,6 +327,7 @@ export default function VideoModule({ moduleId, contentUrl }: VideoModuleProps) 
 
     return () => {
       cancelled = true
+      playerRef.current = null
       if (pollId !== undefined) window.clearInterval(pollId)
       mo?.disconnect()
       if (player) {
@@ -276,22 +340,52 @@ export default function VideoModule({ moduleId, contentUrl }: VideoModuleProps) 
       setWaiting(false)
       setHiding(false)
     }
-  }, [provider, embedId, moduleId, onReachEnd])
+  }, [provider, embedId, moduleId, onReachEnd, autoplay])
+
+  const renderUnmuteButton = () => {
+    // Hide when audio is unmuted or when video has ended
+    if (ended || !isMuted) return null
+
+    return (
+      <button
+        type="button"
+        onClick={handleToggleMute}
+        aria-label="Tap to unmute"
+        className="pointer-events-auto absolute right-3 top-3 z-30 flex cursor-pointer select-none items-center gap-1.5 rounded-full bg-black/80 px-3 py-1.5 text-xs font-semibold text-white shadow-lg backdrop-blur-md ring-1 ring-white/25 transition-all hover:bg-black/95 hover:ring-white/45 active:scale-95 sm:right-4 sm:top-4"
+      >
+        <VolumeX className="size-4 shrink-0 text-white animate-pulse" />
+        <span>Tap to unmute</span>
+      </button>
+    )
+  }
 
   if (direct) {
     return (
-      <video
-        src={contentUrl}
-        controls
-        className="w-full rounded-lg sm:rounded-xl shadow-md sm:shadow-lg bg-black max-h-[60vh] sm:max-h-[70vh]"
-        onTimeUpdate={(e) => {
-          const v = e.currentTarget
-          if (!v.duration || Number.isNaN(v.duration)) return
-          const left = v.duration - v.currentTime
-          if (left <= END_SECONDS_THRESHOLD) onReachEnd()
-        }}
-        onEnded={() => onReachEnd()}
-      />
+      <div
+        className={`relative aspect-video w-full rounded-xl overflow-hidden shadow-lg bg-black ${className}`.trim()}
+      >
+        <video
+          ref={directVideoRef}
+          src={contentUrl}
+          controls
+          autoPlay={autoplay}
+          muted={isMuted}
+          playsInline
+          className="size-full object-contain"
+          onVolumeChange={(e) => setIsMuted(e.currentTarget.muted)}
+          onTimeUpdate={(e) => {
+            const v = e.currentTarget
+            if (!v.duration || Number.isNaN(v.duration)) return
+            const left = v.duration - v.currentTime
+            if (left <= END_SECONDS_THRESHOLD) onReachEnd()
+          }}
+          onEnded={() => {
+            setEnded(true)
+            onReachEnd()
+          }}
+        />
+        {renderUnmuteButton()}
+      </div>
     )
   }
 
@@ -307,9 +401,11 @@ export default function VideoModule({ moduleId, contentUrl }: VideoModuleProps) 
       .join(' ')
 
     return (
-      <div className="video-module-plyr-host relative aspect-video w-full rounded-xl overflow-hidden shadow-lg bg-black">
+      <div
+        className={`video-module-plyr-host relative aspect-video w-full rounded-xl overflow-hidden shadow-lg bg-black ${className}`.trim()}
+      >
         <div
-          key={`${moduleId}-${embedId}`}
+          key={`${moduleId || 'preview'}-${embedId}`}
           ref={embedRef}
           className="h-full w-full"
           data-plyr-provider={provider}
@@ -317,19 +413,27 @@ export default function VideoModule({ moduleId, contentUrl }: VideoModuleProps) 
         />
         {/* Veil rendered in React — auto-cleaned on unmount, no stale DOM */}
         <div className={veilClasses} />
+        {renderUnmuteButton()}
       </div>
     )
   }
 
   return (
-    <div className="relative aspect-video w-full rounded-xl overflow-hidden shadow-lg bg-black">
+    <div
+      className={`relative aspect-video w-full rounded-xl overflow-hidden shadow-lg bg-black ${className}`.trim()}
+    >
       <iframe
-        src={contentUrl}
+        src={
+          autoplay
+            ? `${contentUrl}${contentUrl.includes('?') ? '&' : '?'}autoplay=1&mute=1`
+            : contentUrl
+        }
         title="Video player"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
         className="absolute inset-0 w-full h-full"
       />
+      {renderUnmuteButton()}
     </div>
   )
 }

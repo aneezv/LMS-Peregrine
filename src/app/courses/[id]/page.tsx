@@ -22,6 +22,8 @@ import {
 } from '@/components/ui/empty'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { CoursePageMobileShell } from '@/components/courses/course-page-mobile-shell'
+import VideoModule from '@/components/VideoModule'
+import { isValidDemoVideoUrl } from '@/lib/video-url'
 import {
   CourseSyllabusAccordion,
   type SyllabusWeek,
@@ -42,7 +44,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
     supabase
       .from('courses')
       .select(`
-        id, instructor_id, course_code, title, description, thumbnail_url, starts_at, enrollment_type,
+        id, instructor_id, course_code, title, description, thumbnail_url, demo_video_url, starts_at, enrollment_type,
         price, discount_percent,
         profiles:instructor_id ( full_name ),
         department:department_id ( id, name )
@@ -216,7 +218,18 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
     </div>
   )
 
-  const mobileHero = course.thumbnail_url ? (
+  const demoVideoUrl = (course as { demo_video_url?: string | null }).demo_video_url
+  const hasValidDemo = isValidDemoVideoUrl(demoVideoUrl)
+
+  const mobileHero = hasValidDemo ? (
+    <div className="relative aspect-video w-full overflow-hidden bg-black">
+      <VideoModule
+        contentUrl={demoVideoUrl!}
+        autoplay
+        className="size-full rounded-none"
+      />
+    </div>
+  ) : course.thumbnail_url ? (
     <div className="relative h-36 w-full min-w-0 overflow-hidden bg-muted sm:h-40">
       <img
         src={toRenderableImageUrl(course.thumbnail_url)}
@@ -264,26 +277,29 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
     ) : null
 
   const courseMetaSubtitle = (
-    <p className="text-[13px] leading-snug text-muted-foreground sm:text-sm">
+    <p className="flex flex-wrap items-center gap-1.5 text-[13px] leading-snug text-muted-foreground sm:text-sm">
+      {hasValidDemo && (
+        <Badge variant="outline" className="font-mono text-[11px] font-semibold text-foreground">
+          {course.course_code}
+        </Badge>
+      )}
       {departmentName ? (
         <>
-          <Badge variant="secondary" className="mr-2 align-middle font-normal">
+          <Badge variant="secondary" className="font-normal">
             {departmentName}
           </Badge>
         </>
       ) : null}
       <span className="font-medium text-foreground/90">{instructorName}</span>
       {totalModules > 0 && (
-        <>
-          {' · '}
-          {totalModules} lesson{totalModules !== 1 ? 's' : ''}
-        </>
+        <span>
+          · {totalModules} lesson{totalModules !== 1 ? 's' : ''}
+        </span>
       )}
       {sectionGroups.length > 0 && (
-        <>
-          {' · '}
-          {sectionGroups.length} week{sectionGroups.length === 1 ? '' : 's'}
-        </>
+        <span>
+          · {sectionGroups.length} week{sectionGroups.length === 1 ? '' : 's'}
+        </span>
       )}
     </p>
   )
@@ -313,9 +329,14 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
 
   const mobileTitleBlock = (
     <div className="flex flex-col gap-2">
-      <h1 className="font-heading text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-2xl">
-        {course.title}
-      </h1>
+      <div className="flex items-start justify-between gap-2">
+        <h1 className="font-heading text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-2xl">
+          {course.title}
+        </h1>
+        {hasValidDemo && showCompletionChestBadge ? (
+          <div className="shrink-0">{completionChestBadge}</div>
+        ) : null}
+      </div>
       {enrollmentTitleIndicator}
       {courseMetaSubtitle}
       {renderEnrolledProgressSection()}
@@ -417,7 +438,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
         hero={mobileHero}
         titleBlock={mobileTitleBlock}
         defaultTab={isEnrolled && !completedInternship ? 'syllabus' : 'overview'}
-        completionBadge={completionChestBadge}
+        completionBadge={hasValidDemo ? undefined : completionChestBadge}
         overview={
           <>
             {renderOverview({ showEnrollInline: false })}
@@ -446,7 +467,15 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
       <div className="mx-auto hidden w-full max-w-7xl flex-col gap-6 lg:grid lg:max-w-none lg:grid-cols-[minmax(0,1fr)_minmax(260px,22rem)] lg:items-start lg:gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(280px,26rem)] xl:gap-8">
         <div className="flex min-w-0 flex-col gap-6 lg:col-start-1">
           <Card className="gap-0 overflow-hidden p-0 shadow-sm">
-            {course.thumbnail_url ? (
+            {hasValidDemo ? (
+              <div className="relative aspect-video w-full overflow-hidden rounded-t-xl bg-black">
+                <VideoModule
+                  contentUrl={demoVideoUrl!}
+                  autoplay
+                  className="size-full rounded-none"
+                />
+              </div>
+            ) : course.thumbnail_url ? (
               <div className="relative h-36 w-full min-w-0 overflow-visible bg-muted sm:h-44">
                 <img
                   src={toRenderableImageUrl(course.thumbnail_url)}
@@ -477,17 +506,24 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
             <CardHeader
               className={cn(
                 'flex flex-col gap-0 border-b border-border px-0 pb-4',
-                course.thumbnail_url
-                  ? showCompletionChestBadge
-                    ? 'pt-8 sm:pt-9'
-                    : 'pt-5 sm:pt-6'
-                  : 'pt-4',
+                hasValidDemo
+                  ? 'pt-5 sm:pt-6'
+                  : course.thumbnail_url
+                    ? showCompletionChestBadge
+                      ? 'pt-8 sm:pt-9'
+                      : 'pt-5 sm:pt-6'
+                    : 'pt-4',
               )}
             >
               <div className="flex flex-col gap-3 px-4">
-                <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-                  {course.title}
-                </h1>
+                <div className="flex items-start justify-between gap-3">
+                  <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+                    {course.title}
+                  </h1>
+                  {hasValidDemo && showCompletionChestBadge ? (
+                    <div className="shrink-0">{completionChestBadge}</div>
+                  ) : null}
+                </div>
                 {enrollmentTitleIndicator}
                 {courseMetaSubtitle}
               </div>

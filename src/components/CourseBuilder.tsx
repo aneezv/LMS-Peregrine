@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import Image from 'next/image'
+import VideoModule from '@/components/VideoModule'
+import { isValidDemoVideoUrl } from '@/lib/video-url'
 import {
   DndContext,
   closestCenter,
@@ -173,7 +175,7 @@ function buildModuleSubtypePayloads(mod: ModuleItem, moduleId: string) {
 
   return {
     content:
-      mod.type === 'video' || mod.type === 'live_session' || mod.type === 'document'
+      mod.type === 'video' || mod.type === 'live_session' || (mod.type as string) === 'document'
         ? { module_id: moduleId, content_url: mod.content_url.trim() || null }
         : null,
     session:
@@ -186,7 +188,7 @@ function buildModuleSubtypePayloads(mod: ModuleItem, moduleId: string) {
           }
         : null,
     quiz:
-      mod.type === 'mcq' || mod.type === 'quiz'
+      mod.type === 'mcq' || (mod.type as string) === 'quiz'
         ? {
             module_id: moduleId,
             quiz_passing_pct: Math.min(100, Math.max(0, Math.trunc(Number(mod.quiz_passing_pct)) || 60)),
@@ -531,6 +533,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
   const [description, setDescription] = useState('')
   const [courseStartsAt, setCourseStartsAt] = useState('')
   const [thumbnailUrl, setThumbnailUrl] = useState('')
+  const [demoVideoUrl, setDemoVideoUrl] = useState('')
   const [enrollmentType, setEnrollmentType] = useState<'open' | 'invite_only'>('invite_only')
   const [departmentOptions, setDepartmentOptions] = useState<
     { id: string; name: string; sort_order: number }[]
@@ -622,7 +625,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       const { data: course, error: cErr } = await supabase
         .from('courses')
         .select(
-          'title, course_code, description, thumbnail_url, starts_at, enrollment_type, status, instructor_id, department_id, price, discount_percent'
+          'title, course_code, description, thumbnail_url, demo_video_url, starts_at, enrollment_type, status, instructor_id, department_id, price, discount_percent'
         )
         .eq('id', courseId)
         .single()
@@ -639,6 +642,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       setSelectedInstructorId((course.instructor_id as string) ?? '')
       setDescription(course.description ?? '')
       setThumbnailUrl(course.thumbnail_url ?? '')
+      setDemoVideoUrl((course.demo_video_url as string) ?? '')
       setCourseStartsAt(
         course.starts_at ? toDatetimeLocalValue(course.starts_at as string) : ''
       )
@@ -756,6 +760,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         description,
         courseStartsAt,
         thumbnailUrl,
+        demoVideoUrl,
         enrollmentType,
         selectedInstructorId,
         departmentId,
@@ -769,6 +774,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       description,
       courseStartsAt,
       thumbnailUrl,
+      demoVideoUrl,
       enrollmentType,
       selectedInstructorId,
       departmentId,
@@ -1096,6 +1102,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       description,
       courseStartsAt,
       thumbnailUrl,
+      demoVideoUrl,
       enrollmentType,
       selectedInstructorId,
       departmentId,
@@ -1114,6 +1121,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           course_code: courseCode.trim(),
           description: description.trim() || null,
           thumbnail_url: thumbnailUrl.trim() || null,
+          demo_video_url: demoVideoUrl.trim() || null,
           starts_at: startsAtIso,
           status: publish ? 'published' : 'draft',
           enrollment_type: enrollmentType,
@@ -1273,6 +1281,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           title: title.trim(),
           description: description.trim() || null,
           thumbnail_url: thumbnailUrl.trim() || null,
+          demo_video_url: demoVideoUrl.trim() || null,
           starts_at: startsAtIso,
           status: publish ? 'published' : 'draft',
           enrollment_type: enrollmentType,
@@ -1360,6 +1369,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       setDescription(backupState.description)
       setCourseStartsAt(backupState.courseStartsAt)
       setThumbnailUrl(backupState.thumbnailUrl)
+      setDemoVideoUrl(backupState.demoVideoUrl)
       setEnrollmentType(backupState.enrollmentType)
       setSelectedInstructorId(backupState.selectedInstructorId)
       setDepartmentId(backupState.departmentId)
@@ -1626,6 +1636,53 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
               Paste a public URL, or upload an image to Google Drive to auto-fill this field. Hover this area to preview.
             </p>
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label>Demo Video URL</Label>
+            {demoVideoUrl.trim() && (
+              <button
+                type="button"
+                onClick={() => setDemoVideoUrl('')}
+                className="text-xs font-medium text-slate-500 hover:text-red-600 transition-colors"
+              >
+                Clear video
+              </button>
+            )}
+          </div>
+          <FieldInput
+            type="url"
+            value={demoVideoUrl}
+            onChange={(e) => setDemoVideoUrl(e.target.value)}
+            placeholder="https://www.youtube.com/watch?v=... or https://vimeo.com/..."
+          />
+          <p className="text-xs text-slate-500">
+            Paste a YouTube or Vimeo link to use as the course introductory demo video.
+          </p>
+
+          {demoVideoUrl.trim() && (
+            <div className="mt-3 max-w-xl">
+              {isValidDemoVideoUrl(demoVideoUrl) ? (
+                <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm bg-black">
+                  <div className="flex items-center justify-between bg-slate-900 px-3 py-1.5 text-xs text-slate-300">
+                    <span className="font-medium text-slate-200">Demo Video Player Preview</span>
+                    <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-blue-400">
+                      {demoVideoUrl.includes('vimeo') ? 'Vimeo' : 'YouTube'}
+                    </span>
+                  </div>
+                  <VideoModule contentUrl={demoVideoUrl.trim()} />
+                </div>
+              ) : (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                  <p className="font-semibold">Unsupported video format</p>
+                  <p className="mt-0.5 text-amber-700">
+                    Only <strong>YouTube</strong> and <strong>Vimeo</strong> URLs are supported. Please check the URL format.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div>
