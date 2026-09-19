@@ -52,14 +52,14 @@ export function CourseBuilderHeader({
   onRequestDeleteCourse,
 }: CourseBuilderHeaderProps) {
   return (
-    <div className="sticky top-0 z-30 -mx-1 -mt-1 sm:-mx-6 sm:-mt-8 lg:-mx-8 mb-6 border-b border-slate-200/80 bg-white/95 backdrop-blur-md shadow-2xs">
+    <div className="sticky top-16 z-20 -mx-1 -mt-1 sm:-mx-6 sm:-mt-8 lg:-mx-8 mb-6 border-b border-slate-200/80 bg-white/95 backdrop-blur-md shadow-2xs transition-all">
       {/* Top Header Row */}
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
         {/* Left Side: Back Link, Title & Status */}
         <div className="flex min-w-0 items-center gap-3">
           <Link
             href="/courses"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900 active:scale-95"
             title="Back to courses"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -67,19 +67,19 @@ export function CourseBuilderHeader({
 
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="truncate text-base font-bold text-slate-900">
+              <span className="truncate text-base font-bold text-slate-900 tracking-tight">
                 {title.trim() || 'Untitled Course'}
               </span>
 
               {courseCode.trim() && (
-                <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-600">
+                <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-600 border border-slate-200/60">
                   {courseCode.trim()}
                 </span>
               )}
 
               {/* Status Badge */}
               <span
-                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
                   isPublished
                     ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                     : 'bg-amber-50 text-amber-700 border border-amber-200'
@@ -90,7 +90,7 @@ export function CourseBuilderHeader({
 
               {/* Unsaved Changes Indicator */}
               {hasUnsavedChanges && !saved && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 border border-amber-200/60">
                   <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
                   Unsaved changes
                 </span>
@@ -103,7 +103,7 @@ export function CourseBuilderHeader({
                 </span>
               )}
             </div>
-            <p className="hidden sm:block text-[11px] text-slate-400">
+            <p className="hidden sm:block text-[11px] font-medium text-slate-400 mt-0.5">
               {courseId ? 'Course Studio & Curriculum Builder' : 'New Course Studio'}
             </p>
           </div>
@@ -124,7 +124,7 @@ export function CourseBuilderHeader({
                 href={`/courses/${courseId}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900 active:scale-95"
                 title="Preview course landing page"
               >
                 <Eye className="h-3.5 w-3.5 text-slate-500" />
@@ -135,7 +135,7 @@ export function CourseBuilderHeader({
                 type="button"
                 onClick={onRequestDeleteCourse}
                 disabled={deleting || saving}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50/60 px-3 py-2 text-xs font-semibold text-red-600 shadow-2xs transition hover:bg-red-100 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50/60 px-3 py-2 text-xs font-semibold text-red-600 shadow-2xs transition hover:bg-red-100 active:scale-95 disabled:opacity-50"
                 title="Delete course"
               >
                 {deleting ? (
@@ -153,7 +153,7 @@ export function CourseBuilderHeader({
             type="button"
             onClick={() => onSave(false)}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 active:scale-95 disabled:opacity-50"
           >
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
             Save Draft
@@ -164,7 +164,7 @@ export function CourseBuilderHeader({
             type="button"
             onClick={() => onSave(true)}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-blue-700 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-blue-700 active:scale-95 disabled:opacity-50"
           >
             {saving ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -177,13 +177,13 @@ export function CourseBuilderHeader({
       </div>
 
       {/* Tabs Navigation Bar */}
-      <div className="mx-auto flex max-w-7xl items-center gap-1 px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 sm:px-6 lg:px-8 pt-1">
         <button
           type="button"
           onClick={() => onTabChange('curriculum')}
-          className={`flex items-center gap-2 border-b-2 px-3.5 py-2.5 text-xs font-bold transition-all ${
+          className={`flex items-center gap-2 rounded-t-xl border-b-2 px-4 py-2.5 text-xs font-bold transition-all ${
             activeTab === 'curriculum'
-              ? 'border-blue-600 text-blue-600'
+              ? 'border-blue-600 text-blue-600 bg-blue-50/40'
               : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900'
           }`}
         >
@@ -203,9 +203,9 @@ export function CourseBuilderHeader({
         <button
           type="button"
           onClick={() => onTabChange('details')}
-          className={`flex items-center gap-2 border-b-2 px-3.5 py-2.5 text-xs font-bold transition-all ${
+          className={`flex items-center gap-2 rounded-t-xl border-b-2 px-4 py-2.5 text-xs font-bold transition-all ${
             activeTab === 'details'
-              ? 'border-blue-600 text-blue-600'
+              ? 'border-blue-600 text-blue-600 bg-blue-50/40'
               : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900'
           }`}
         >
@@ -216,9 +216,9 @@ export function CourseBuilderHeader({
         <button
           type="button"
           onClick={() => onTabChange('pricing')}
-          className={`flex items-center gap-2 border-b-2 px-3.5 py-2.5 text-xs font-bold transition-all ${
+          className={`flex items-center gap-2 rounded-t-xl border-b-2 px-4 py-2.5 text-xs font-bold transition-all ${
             activeTab === 'pricing'
-              ? 'border-blue-600 text-blue-600'
+              ? 'border-blue-600 text-blue-600 bg-blue-50/40'
               : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900'
           }`}
         >

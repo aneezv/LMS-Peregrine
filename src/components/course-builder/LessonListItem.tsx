@@ -3,13 +3,14 @@
 import React from 'react'
 import { ModuleItem, TYPE_OPTIONS, TYPE_COLOR } from './types'
 import { SortableItem } from '@/components/SortableItem'
-import { Copy, Trash2 } from 'lucide-react'
+import { Copy, CopyPlus, Trash2 } from 'lucide-react'
 
 interface LessonListItemProps {
   module: ModuleItem
   isActive: boolean
   onSelect: () => void
   onCopy: (e: React.MouseEvent) => void
+  onDuplicate: (e: React.MouseEvent) => void
   onDelete: (e: React.MouseEvent) => void
 }
 
@@ -18,6 +19,7 @@ export function LessonListItem({
   isActive,
   onSelect,
   onCopy,
+  onDuplicate,
   onDelete,
 }: LessonListItemProps) {
   const typeOpt = TYPE_OPTIONS.find((t) => t.value === module.type) ?? TYPE_OPTIONS[0]
@@ -29,10 +31,15 @@ export function LessonListItem({
         onClick={onSelect}
         className={`group relative flex cursor-pointer select-none items-center gap-2.5 rounded-xl border px-3 py-2.5 pl-8 transition-all ${
           isActive
-            ? 'border-blue-500 bg-blue-50/70 shadow-xs ring-2 ring-blue-500/20'
-            : 'border-slate-200/90 bg-white hover:border-slate-300 hover:bg-slate-50/80'
+            ? 'border-blue-500 bg-blue-50/80 shadow-xs ring-2 ring-blue-500/20'
+            : 'border-slate-200/90 bg-white hover:border-slate-300 hover:bg-slate-50/80 hover:shadow-2xs'
         }`}
       >
+        {/* Left Accent Stripe when Active */}
+        {isActive && (
+          <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-blue-600" />
+        )}
+
         {/* Week Badge */}
         <span
           className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500"
@@ -43,7 +50,7 @@ export function LessonListItem({
 
         {/* Type Icon Badge */}
         <span
-          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${color.bg} ${color.text}`}
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${color.bg} ${color.text} shadow-2xs`}
           title={`Type: ${typeOpt.label}`}
         >
           {typeOpt.icon}
@@ -56,6 +63,14 @@ export function LessonListItem({
 
         {/* Quick Actions (visible on hover / active) */}
         <div className="flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition">
+          <button
+            type="button"
+            onClick={onDuplicate}
+            className="rounded-md p-1 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition"
+            title="Duplicate lesson"
+          >
+            <CopyPlus className="h-3.5 w-3.5" />
+          </button>
           <button
             type="button"
             onClick={onCopy}

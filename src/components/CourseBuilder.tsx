@@ -709,6 +709,24 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
     }
   }
 
+  const duplicateModule = (mod: ModuleItem) => {
+    const fresh = remapModuleIds(mod)
+    const idx = modules.findIndex((m) => m.id === mod.id)
+    const insertAt = idx >= 0 ? idx + 1 : modules.length
+    const duplicated: ModuleItem = {
+      ...fresh,
+      title: `${mod.title} (Copy)`,
+    }
+    setModules((prev) => {
+      const next = [...prev]
+      next.splice(insertAt, 0, duplicated)
+      return next
+    })
+    setActiveId(duplicated.id)
+    setModifiedModuleIds((prev) => new Set([...prev, duplicated.id]))
+    toast.success(`Duplicated "${mod.title}"`)
+  }
+
   const reorderModules = (newModules: ModuleItem[], movedId: string) => {
     setModules(newModules)
     setModifiedModuleIds((prev) => new Set([...prev, movedId]))
@@ -1193,6 +1211,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           onDeleteModule={removeModule}
           onUpdateActiveModule={updateActiveModule}
           onCopyModule={copyModuleToClipboard}
+          onDuplicateModule={duplicateModule}
           onPasteModule={pasteModuleFromClipboard}
           onReorderModules={reorderModules}
           onAddSection={addSection}

@@ -24,6 +24,7 @@ interface CurriculumSectionItemProps {
   onSelectModule: (id: string) => void
   onAddModule: (sectionId: string) => void
   onCopyModule: (mod: ModuleItem, e: React.MouseEvent) => void
+  onDuplicateModule: (mod: ModuleItem, e: React.MouseEvent) => void
   onDeleteModule: (id: string) => void
   onUpdateSectionTitle: (sectionId: string, title: string) => void
   onMoveSection: (index: number, direction: 'up' | 'down') => void
@@ -39,6 +40,7 @@ export function CurriculumSectionItem({
   onSelectModule,
   onAddModule,
   onCopyModule,
+  onDuplicateModule,
   onDeleteModule,
   onUpdateSectionTitle,
   onMoveSection,
@@ -208,6 +210,7 @@ export function CurriculumSectionItem({
                 isActive={mod.id === activeModuleId}
                 onSelect={() => onSelectModule(mod.id)}
                 onCopy={(e) => onCopyModule(mod, e)}
+                onDuplicate={(e) => onDuplicateModule(mod, e)}
                 onDelete={(e) => {
                   e.stopPropagation()
                   onDeleteModule(mod.id)

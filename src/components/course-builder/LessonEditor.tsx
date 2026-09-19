@@ -7,6 +7,8 @@ import { QuizEditor } from './editors/QuizEditor'
 import { AssignmentEditor } from './editors/AssignmentEditor'
 import { SessionEditor } from './editors/SessionEditor'
 import { ExternalResourcesEditor } from './editors/ExternalResourcesEditor'
+import VideoModule from '@/components/VideoModule'
+import { isValidDemoVideoUrl } from '@/lib/video-url'
 import { unlockAtForWeek } from '@/lib/unlock-schedule'
 import {
   ClipboardPaste,
@@ -15,6 +17,7 @@ import {
   Layers,
   Sparkles,
   BookOpen,
+  PlayCircle,
 } from 'lucide-react'
 
 interface LessonEditorProps {
@@ -54,6 +57,7 @@ export function LessonEditor({
   }
 
   const currentColor = TYPE_COLOR[activeModule.type] ?? TYPE_COLOR.video
+  const currentTypeOpt = TYPE_OPTIONS.find((t) => t.value === activeModule.type) ?? TYPE_OPTIONS[0]
 
   return (
     <div className="space-y-6 rounded-3xl border border-slate-200/90 bg-white p-5 sm:p-7 shadow-xs">
@@ -61,19 +65,24 @@ export function LessonEditor({
       <div className="space-y-4 border-b border-slate-100 pb-5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${currentColor.bg} ${currentColor.text}`}>
-              <Sparkles className="h-4 w-4" />
+            <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${currentColor.bg} ${currentColor.text} shadow-2xs`}>
+              {currentTypeOpt.icon}
             </span>
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Configure Lesson
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Editing {currentTypeOpt.label} Lesson
+              </span>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                Week {activeModule.week_index}
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={onPasteAfter}
-              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition shadow-2xs"
+              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 active:scale-95 transition shadow-2xs"
               title="Paste copied lesson after this one"
             >
               <ClipboardPaste className="h-3.5 w-3.5" />
@@ -82,7 +91,7 @@ export function LessonEditor({
             <button
               type="button"
               onClick={() => onDelete(activeModule.id)}
-              className="rounded-xl border border-red-200 bg-red-50/50 p-2 text-red-600 hover:bg-red-100 transition shadow-2xs"
+              className="rounded-xl border border-red-200 bg-red-50/50 p-2 text-red-600 hover:bg-red-100 active:scale-95 transition shadow-2xs"
               title="Delete lesson"
             >
               <Trash2 className="h-4 w-4" />
@@ -114,14 +123,14 @@ export function LessonEditor({
                   key={opt.value}
                   type="button"
                   onClick={() => onUpdate({ type: opt.value })}
-                  className={`flex flex-col items-center justify-center gap-1 rounded-xl border p-2.5 text-center text-xs font-semibold transition-all ${
+                  className={`flex flex-col items-center justify-center gap-1 rounded-xl border p-2 text-center text-xs font-semibold transition-all active:scale-95 ${
                     isSelected
                       ? 'border-blue-600 bg-blue-600 text-white shadow-xs'
                       : 'border-slate-200/80 bg-slate-50/60 text-slate-700 hover:border-slate-300 hover:bg-slate-100/80'
                   }`}
                 >
                   <span className={isSelected ? 'text-white' : color.text}>{opt.icon}</span>
-                  <span className="truncate">{opt.label}</span>
+                  <span className="truncate w-full text-[11px]">{opt.label}</span>
                 </button>
               )
             })}
@@ -232,7 +241,7 @@ export function LessonEditor({
           <h4 className="text-sm font-semibold">Lesson Content & Details</h4>
         </div>
 
-        {/* Video Type */}
+        {/* Video Type with Live Player Preview */}
         {activeModule.type === 'video' && (
           <div className="space-y-4 rounded-2xl border border-blue-100 bg-blue-50/30 p-4 shadow-2xs">
             <div>
@@ -248,6 +257,23 @@ export function LessonEditor({
                 Paste a public or unlisted YouTube or Vimeo video link.
               </p>
             </div>
+
+            {activeModule.content_url.trim() && (
+              <div className="mt-3">
+                {isValidDemoVideoUrl(activeModule.content_url) ? (
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-black aspect-video shadow-sm">
+                    <VideoModule contentUrl={activeModule.content_url.trim()} />
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                    <p className="font-semibold">Unsupported video URL</p>
+                    <p className="mt-0.5 text-amber-700">
+                      Please provide a valid YouTube or Vimeo URL format.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

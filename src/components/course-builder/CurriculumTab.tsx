@@ -31,6 +31,7 @@ interface CurriculumTabProps {
   onDeleteModule: (id: string) => void
   onUpdateActiveModule: (patch: Partial<ModuleItem>) => void
   onCopyModule: (mod: ModuleItem, e: React.MouseEvent) => void
+  onDuplicateModule: (mod: ModuleItem) => void
   onPasteModule: () => void
   onReorderModules: (newModules: ModuleItem[], movedId: string) => void
   onAddSection: () => void
@@ -49,6 +50,7 @@ export function CurriculumTab({
   onDeleteModule,
   onUpdateActiveModule,
   onCopyModule,
+  onDuplicateModule,
   onPasteModule,
   onReorderModules,
   onAddSection,
@@ -115,7 +117,7 @@ export function CurriculumTab({
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
-      {/* Left Column: Curriculum Tree (~40% on desktop) */}
+      {/* Left Column: Curriculum Tree (~42% on desktop) */}
       <div className="space-y-4 lg:col-span-5">
         {/* Toolbar: Search, Paste, Add Section */}
         <div className="space-y-2.5 rounded-2xl border border-slate-200/90 bg-white p-3.5 shadow-2xs">
@@ -126,7 +128,7 @@ export function CurriculumTab({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search lessons..."
+                placeholder="Filter lessons by title or type..."
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-1.5 pl-8 pr-7 text-xs text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
               {searchQuery && (
@@ -143,7 +145,7 @@ export function CurriculumTab({
             <button
               type="button"
               onClick={onPasteModule}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 active:scale-95 transition"
               title="Paste copied lesson"
             >
               <ClipboardPaste className="h-3.5 w-3.5" />
@@ -152,7 +154,7 @@ export function CurriculumTab({
           </div>
 
           <div className="flex items-center justify-between text-xs text-slate-500 px-0.5">
-            <span>
+            <span className="font-medium">
               {sections.length} {sections.length === 1 ? 'Section' : 'Sections'} &bull;{' '}
               {modules.length} {modules.length === 1 ? 'Lesson' : 'Lessons'}
             </span>
@@ -177,7 +179,7 @@ export function CurriculumTab({
             items={filteredModules.map((m) => m.id)}
             strategy={verticalListSortingStrategy}
           >
-            <div className="space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-[calc(100vh-230px)] overflow-y-auto pr-1">
               {sections.map((section, secIdx) => {
                 const sectionMods = filteredModules.filter(
                   (m) => m.section_id === section.id
@@ -194,6 +196,10 @@ export function CurriculumTab({
                     onSelectModule={onSelectModule}
                     onAddModule={onAddModule}
                     onCopyModule={onCopyModule}
+                    onDuplicateModule={(mod, e) => {
+                      e.stopPropagation()
+                      onDuplicateModule(mod)
+                    }}
                     onDeleteModule={onDeleteModule}
                     onUpdateSectionTitle={onUpdateSectionTitle}
                     onMoveSection={onMoveSection}
@@ -208,14 +214,14 @@ export function CurriculumTab({
         <button
           type="button"
           onClick={onAddSection}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-blue-300 bg-blue-50/50 py-3 text-xs font-bold text-blue-700 transition hover:border-blue-400 hover:bg-blue-100/60 shadow-2xs"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-blue-300 bg-blue-50/50 py-3 text-xs font-bold text-blue-700 transition hover:border-blue-400 hover:bg-blue-100/60 shadow-2xs active:scale-95"
         >
           <FolderPlus className="h-4 w-4" /> Add New Section
         </button>
       </div>
 
-      {/* Right Column: Focused Lesson Editor (~60% on desktop) */}
-      <div className="lg:col-span-7">
+      {/* Right Column: Sticky Focused Lesson Editor (~58% on desktop) */}
+      <div className="lg:col-span-7 lg:sticky lg:top-[128px] lg:max-h-[calc(100vh-148px)] lg:overflow-y-auto pr-1">
         <LessonEditor
           activeModule={activeModule}
           sections={sections}
