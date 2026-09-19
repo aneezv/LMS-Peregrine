@@ -7,7 +7,6 @@ import {
   Eye,
   Trash2,
   Save,
-  Send,
   Loader2,
   CheckCircle2,
   AlertCircle,
@@ -22,7 +21,8 @@ interface CourseBuilderHeaderProps {
   courseId?: string
   title: string
   courseCode: string
-  isPublished: boolean
+  status: 'draft' | 'published'
+  onStatusChange: (status: 'draft' | 'published') => void
   hasUnsavedChanges: boolean
   saving: boolean
   saved: boolean
@@ -31,7 +31,7 @@ interface CourseBuilderHeaderProps {
   activeTab: StudioTab
   lessonCount: number
   onTabChange: (tab: StudioTab) => void
-  onSave: (publish: boolean) => void
+  onSave: () => void
   onRequestDeleteCourse: () => void
 }
 
@@ -39,7 +39,8 @@ export function CourseBuilderHeader({
   courseId,
   title,
   courseCode,
-  isPublished,
+  status,
+  onStatusChange,
   hasUnsavedChanges,
   saving,
   saved,
@@ -77,17 +78,6 @@ export function CourseBuilderHeader({
                 </span>
               )}
 
-              {/* Status Badge */}
-              <span
-                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
-                  isPublished
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                    : 'bg-amber-50 text-amber-700 border border-amber-200'
-                }`}
-              >
-                {isPublished ? 'Published' : 'Draft'}
-              </span>
-
               {/* Unsaved Changes Indicator */}
               {hasUnsavedChanges && !saved && (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 border border-amber-200/60">
@@ -109,14 +99,59 @@ export function CourseBuilderHeader({
           </div>
         </div>
 
-        {/* Right Side: Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Right Side: Action Buttons & Status Toggle */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
           {actionError && (
             <span className="flex items-center gap-1 text-xs font-semibold text-red-600 mr-1" role="alert">
               <AlertCircle className="h-3.5 w-3.5" />
               {actionError}
             </span>
           )}
+
+          {/* Status Toggle Switch: Draft <-> Published */}
+          <div
+            onClick={() => onStatusChange(status === 'published' ? 'draft' : 'published')}
+            className={`group flex cursor-pointer items-center gap-2 rounded-xl border px-2.5 py-1.5 shadow-2xs transition-all select-none active:scale-95 ${
+              status === 'published'
+                ? 'border-emerald-200 bg-emerald-50/80 hover:bg-emerald-100/80 text-emerald-800'
+                : 'border-slate-200 bg-slate-50/90 hover:bg-slate-100/90 text-slate-600'
+            }`}
+            title={`Course is currently ${status}. Click to switch to ${status === 'published' ? 'draft' : 'published'}.`}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onStatusChange(status === 'published' ? 'draft' : 'published')
+              }
+            }}
+          >
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`h-2 w-2 rounded-full transition-colors ${
+                  status === 'published'
+                    ? 'bg-emerald-500 ring-2 ring-emerald-200 animate-pulse'
+                    : 'bg-slate-400'
+                }`}
+              />
+              <span className="text-xs font-bold tracking-tight">
+                {status === 'published' ? 'Published' : 'Draft'}
+              </span>
+            </div>
+
+            {/* Modern Sliding Switch */}
+            <div
+              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ease-in-out ${
+                status === 'published' ? 'bg-emerald-600' : 'bg-slate-300 group-hover:bg-slate-400'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm ring-0 transition-transform duration-200 ease-in-out ${
+                  status === 'published' ? 'translate-x-[18px]' : 'translate-x-[2px]'
+                }`}
+              />
+            </div>
+          </div>
 
           {courseId && (
             <>
@@ -148,30 +183,19 @@ export function CourseBuilderHeader({
             </>
           )}
 
-          {/* Save Draft Button */}
+          {/* Single Save Button */}
           <button
             type="button"
-            onClick={() => onSave(false)}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 active:scale-95 disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            Save Draft
-          </button>
-
-          {/* Publish / Save Changes Button */}
-          <button
-            type="button"
-            onClick={() => onSave(true)}
+            onClick={onSave}
             disabled={saving}
             className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-blue-700 active:scale-95 disabled:opacity-50"
           >
             {saving ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <Send className="h-3.5 w-3.5" />
+              <Save className="h-3.5 w-3.5" />
             )}
-            {isPublished ? 'Save & Update' : 'Publish Course'}
+            {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
       </div>

@@ -486,6 +486,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           departmentId: (course.department_id as string) ?? '',
           price: String((course as { price?: number }).price ?? 0),
           discountPercent: String((course as { discount_percent?: number }).discount_percent ?? 0),
+          status: (course.status as 'draft' | 'published') ?? 'draft',
           sections: loadedSections,
           modules: loadedModules,
         }),
@@ -537,6 +538,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         departmentId,
         price,
         discountPercent,
+        status,
         sections,
         modules,
       }),
@@ -552,6 +554,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       departmentId,
       price,
       discountPercent,
+      status,
       sections,
       modules,
     ],
@@ -763,7 +766,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
     }
   }
 
-  const handleSave = async (publish: boolean) => {
+  const handleSave = async () => {
     if (!title.trim()) {
       setError('Course title is required.')
       setActiveTab('details')
@@ -831,6 +834,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       departmentId,
       price,
       discountPercent,
+      status,
     }
 
     try {
@@ -856,7 +860,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           thumbnail_url: thumbnailUrl.trim() || null,
           demo_video_url: demoVideoUrl.trim() || null,
           starts_at: startsAtIso,
-          status: publish ? 'published' : 'draft',
+          status: status,
           enrollment_type: enrollmentType,
           department_id: departmentId,
           price: priceNumber,
@@ -1005,9 +1009,8 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         setDeletedModuleIds(new Set())
         setDeletedSectionIds(new Set())
         setBaselineSnapshot(snapshot)
-        setStatus(publish ? 'published' : 'draft')
         setSaved(true)
-        toast.success(publish ? 'Course published!' : 'Draft saved successfully!')
+        toast.success(status === 'published' ? 'Course saved & published!' : 'Course draft saved successfully!')
         setTimeout(() => router.push(`/courses/${courseId}`), 800)
         return
       }
@@ -1024,7 +1027,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           thumbnail_url: thumbnailUrl.trim() || null,
           demo_video_url: demoVideoUrl.trim() || null,
           starts_at: startsAtIso,
-          status: publish ? 'published' : 'draft',
+          status: status,
           enrollment_type: enrollmentType,
           department_id: departmentId,
           price: priceNumber,
@@ -1101,7 +1104,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       setDeletedSectionIds(new Set())
       setBaselineSnapshot(snapshot)
       setSaved(true)
-      toast.success(publish ? 'Course created and published!' : 'Course draft created successfully!')
+      toast.success(status === 'published' ? 'Course created and published!' : 'Course draft created successfully!')
       setTimeout(() => router.push(`/courses/${newCourse.id}`), 1200)
     } catch (e: unknown) {
       console.error('[CourseBuilder] Save failed:', e)
@@ -1129,6 +1132,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       setDepartmentId(backupState.departmentId)
       setPrice(backupState.price)
       setDiscountPercent(backupState.discountPercent)
+      setStatus(backupState.status)
     } finally {
       setSaving(false)
     }
@@ -1179,7 +1183,8 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         courseId={courseId}
         title={title}
         courseCode={courseCode}
-        isPublished={status === 'published'}
+        status={status}
+        onStatusChange={setStatus}
         hasUnsavedChanges={hasUnsavedChanges}
         saving={saving}
         saved={saved}

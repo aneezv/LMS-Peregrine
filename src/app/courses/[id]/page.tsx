@@ -230,17 +230,18 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
       />
     </div>
   ) : course.thumbnail_url ? (
-    <div className="relative h-36 w-full min-w-0 overflow-hidden bg-muted sm:h-40">
+    <div className="relative aspect-video w-full min-w-0 overflow-hidden bg-muted">
       <img
-        src={toRenderableImageUrl(course.thumbnail_url)}
+        src={toRenderableImageUrl(course.thumbnail_url, 1200)}
         alt=""
+        referrerPolicy="no-referrer"
         className="absolute inset-0 block size-full min-h-full min-w-full object-cover object-center"
       />
-      <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-foreground/80 via-foreground/30 to-transparent" />
+      <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-foreground/80 via-foreground/20 to-transparent" />
       {renderCourseCodeThumbnailBadge()}
     </div>
   ) : (
-    <div className="relative flex h-36 w-full items-center justify-center overflow-hidden bg-muted sm:h-40">
+    <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden bg-muted">
       <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-foreground/70 via-foreground/20 to-transparent" />
       <BookOpen className="relative z-0 size-14 text-muted-foreground opacity-40" aria-hidden />
       {renderCourseCodeThumbnailBadge('photo')}
@@ -476,16 +477,17 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
                 />
               </div>
             ) : course.thumbnail_url ? (
-              <div className="relative h-36 w-full min-w-0 overflow-visible bg-muted sm:h-44">
+              <div className="relative aspect-video w-full min-w-0 overflow-hidden rounded-t-xl bg-muted">
                 <img
-                  src={toRenderableImageUrl(course.thumbnail_url)}
+                  src={toRenderableImageUrl(course.thumbnail_url, 1200)}
                   alt=""
+                  referrerPolicy="no-referrer"
                   className="absolute inset-0 block size-full min-h-full min-w-full object-cover object-center"
                 />
-                <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-foreground/70 via-foreground/25 to-transparent" />
+                <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-foreground/70 via-foreground/20 to-transparent" />
                 {renderCourseCodeThumbnailBadge('photo')}
                 {showCompletionChestBadge ? (
-                  <div className="pointer-events-none absolute bottom-0 right-3 z-10 translate-y-1/2 rotate-[-2deg] sm:right-5">
+                  <div className="pointer-events-none absolute bottom-3 right-3 z-10 sm:right-5">
                     {completionChestBadge}
                   </div>
                 ) : null}

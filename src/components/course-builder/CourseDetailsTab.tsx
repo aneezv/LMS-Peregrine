@@ -60,11 +60,8 @@ export function CourseDetailsTab({
   thumbnailPreviewVersion,
 }: CourseDetailsTabProps) {
   const thumbnailPreviewSrc = useMemo(() => {
-    const base = toRenderableImageUrl(thumbnailUrl)
-    if (!base) return ''
-    const joiner = base.includes('?') ? '&' : '?'
-    return `${base}${joiner}v=${thumbnailPreviewVersion}`
-  }, [thumbnailUrl, thumbnailPreviewVersion])
+    return toRenderableImageUrl(thumbnailUrl, 1200)
+  }, [thumbnailUrl])
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
@@ -200,12 +197,11 @@ export function CourseDetailsTab({
           {/* Preview Canvas */}
           {thumbnailUrl ? (
             <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 aspect-video group">
-              <Image
+              <img
                 src={thumbnailPreviewSrc}
                 alt="Course thumbnail preview"
-                fill
-                className="object-cover"
-                unoptimized
+                referrerPolicy="no-referrer"
+                className="h-full w-full object-cover"
               />
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                 <a
