@@ -37,6 +37,12 @@ import {
   Upload,
   Copy,
   ClipboardPaste,
+  Pencil,
+  Check,
+  X,
+  ChevronUp,
+  ChevronDown,
+  FolderPlus,
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -56,6 +62,15 @@ import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog'
 import { firstEmbeddedAssignment } from '@/lib/embedded-assignment'
 import { getModuleContentUrl, getModuleQuizSettings, getModuleSessionFields } from '@/lib/module-subtypes'
 
+interface SectionItem {
+  /** Client/dnd id (equals DB uuid when loaded from server) */
+  id: string
+  /** Set when row exists in DB */
+  dbId: string | null
+  title: string
+  sort_order: number
+}
+
 type ModuleType =
   | 'video'
   | 'assignment'
@@ -70,6 +85,8 @@ interface ModuleItem {
   id: string
   /** Set when row exists in DB */
   dbId: string | null
+  /** Section ID (client id or DB uuid) this module belongs to */
+  section_id: string
   title: string
   type: ModuleType
   /** 1-based week number for syllabus grouping */
@@ -270,9 +287,17 @@ async function syncAssignmentForModule(
   }
 }
 
-const makeModule = (weekIndex = 1): ModuleItem => ({
+const makeSection = (title = 'New Section', sortOrder = 0): SectionItem => ({
   id: newClientId(),
   dbId: null,
+  title,
+  sort_order: sortOrder,
+})
+
+const makeModule = (sectionId = '', weekIndex = 1): ModuleItem => ({
+  id: newClientId(),
+  dbId: null,
+  section_id: sectionId,
   title: 'New Lesson',
   type: 'video',
   week_index: Math.max(1, Math.trunc(Number(weekIndex)) || 1),
@@ -331,12 +356,13 @@ function parseModuleFromClipboard(text: string): ModuleItem | null {
   }
   if (!parsed || typeof parsed !== 'object') return null
   const p = parsed as Partial<ModuleItem>
-  const base = makeModule(1)
+  const base = makeModule('', 1)
   const merged: ModuleItem = {
     ...base,
     ...p,
     id: typeof p.id === 'string' ? p.id : base.id,
     dbId: null,
+    section_id: typeof p.section_id === 'string' ? p.section_id : base.section_id,
     week_index: Math.max(1, Math.trunc(Number(p.week_index)) || 1),
     type: normalizeModuleType(String(p.type ?? base.type)),
     unlock_mode: p.unlock_mode === 'manual' ? 'manual' : 'auto',
@@ -434,9 +460,11 @@ function FieldInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
 
 function mapDbModuleToItem(
   row: Record<string, unknown>,
-  courseStartsIso: string | null
+  courseStartsIso: string | null,
+  fallbackSectionId: string
 ): ModuleItem {
   const id = row.id as string
+  const sectionId = (row.section_id as string) || fallbackSectionId
   const asn = firstEmbeddedAssignment(row.assignments)
   const weekIndex = (row.week_index as number) ?? 1
   const avail = row.available_from as string | null | undefined
@@ -496,6 +524,7 @@ function mapDbModuleToItem(
   return {
     id,
     dbId: id,
+    section_id: sectionId,
     title: (row.title as string) ?? '',
     type: normalizeModuleType(String(row.type)),
     week_index: weekIndex,
@@ -542,8 +571,18 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
   const [price, setPrice] = useState<string>('0')
   const [discountPercent, setDiscountPercent] = useState<string>('0')
 
-  const [modules, setModules] = useState<ModuleItem[]>([makeModule()])
-  const [activeId, setActiveId] = useState<string>(modules[0]?.id ?? '')
+  const [sections, setSections] = useState<SectionItem[]>(() => [makeSection('Course Content', 0)])
+  const [deletedSectionIds, setDeletedSectionIds] = useState<Set<string>>(new Set())
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null)
+  const [editingSectionTitle, setEditingSectionTitle] = useState<string>('')
+  const [confirmDeleteSection, setConfirmDeleteSection] = useState<{
+    sectionId: string
+    title: string
+    lessonCount: number
+  } | null>(null)
+
+  const [modules, setModules] = useState<ModuleItem[]>([])
+  const [activeId, setActiveId] = useState<string>('')
 
   const [modifiedModuleIds, setModifiedModuleIds] = useState<Set<string>>(new Set())
   const [deletedModuleIds, setDeletedModuleIds] = useState<Set<string>>(new Set())
@@ -575,6 +614,14 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
     const joiner = base.includes('?') ? '&' : '?'
     return `${base}${joiner}v=${thumbnailPreviewVersion}`
   }, [thumbnailUrl, thumbnailPreviewVersion])
+
+  useEffect(() => {
+    if (!courseId && modules.length === 0 && sections.length > 0) {
+      const initialMod = makeModule(sections[0].id, 1)
+      setModules([initialMod])
+      setActiveId(initialMod.id)
+    }
+  }, [courseId, modules.length, sections])
 
   useEffect(() => {
     let cancelled = false
@@ -651,11 +698,36 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       setPrice(String((course as { price?: number }).price ?? 0))
       setDiscountPercent(String((course as { discount_percent?: number }).discount_percent ?? 0))
 
+      const { data: secRows, error: secErr } = await supabase
+        .from('sections')
+        .select('id, title, sort_order')
+        .eq('course_id', courseId)
+        .order('sort_order', { ascending: true })
+
+      if (cancelled) return
+      if (secErr) {
+        setLoadError(secErr.message)
+        setLoading(false)
+        return
+      }
+
+      const loadedSections: SectionItem[] =
+        (secRows ?? []).length > 0
+          ? (secRows ?? []).map((s, idx) => ({
+              id: s.id,
+              dbId: s.id,
+              title: s.title || `Section ${idx + 1}`,
+              sort_order: s.sort_order ?? idx,
+            }))
+          : [makeSection('Course Content', 0)]
+
+      setSections(loadedSections)
+
       const { data: mods, error: mErr } = await supabase
         .from('modules')
         .select(
           `
-          id, type, title, week_index, description, available_from, sort_order,
+          id, type, title, week_index, description, available_from, sort_order, section_id,
           module_content ( content_url ),
           module_session ( session_location, session_start_at, session_end_at ),
           module_quiz_settings (
@@ -677,10 +749,11 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       }
 
       const courseStartsIso = (course.starts_at as string | null) ?? null
+      const defaultSectionId = loadedSections[0]?.id ?? ''
       const mapped = (mods ?? []).map((row) =>
-        mapDbModuleToItem(row as Record<string, unknown>, courseStartsIso)
+        mapDbModuleToItem(row as Record<string, unknown>, courseStartsIso, defaultSectionId)
       )
-      const loadedModules = mapped.length === 0 ? [makeModule()] : mapped
+      const loadedModules = mapped.length === 0 ? [makeModule(defaultSectionId)] : mapped
       setModules(loadedModules)
       setActiveId(loadedModules[0].id)
       setBaselineSnapshot(
@@ -690,11 +763,13 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           description: course.description ?? '',
           courseStartsAt: course.starts_at ? toDatetimeLocalValue(course.starts_at as string) : '',
           thumbnailUrl: course.thumbnail_url ?? '',
+          demoVideoUrl: (course.demo_video_url as string) ?? '',
           enrollmentType: (course.enrollment_type as 'open' | 'invite_only') ?? 'invite_only',
           selectedInstructorId: (course.instructor_id as string) ?? '',
           departmentId: (course.department_id as string) ?? '',
           price: String((course as { price?: number }).price ?? 0),
           discountPercent: String((course as { discount_percent?: number }).discount_percent ?? 0),
+          sections: loadedSections,
           modules: loadedModules,
         }),
       )
@@ -733,24 +808,16 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
   }, [modules, activeId])
 
   const modulesForDisplay = useMemo(() => {
-    return modules
-      .map((m, idx) => ({ m, idx }))
-      .sort((a, b) => a.m.week_index - b.m.week_index || a.idx - b.idx)
-      .map(({ m }) => m)
-  }, [modules])
-
-  const moduleWeekGroups = useMemo(() => {
-    const grouped = new Map<number, ModuleItem[]>()
-    for (const mod of modulesForDisplay) {
-      const week = Math.max(1, Math.trunc(Number(mod.week_index)) || 1)
-      const list = grouped.get(week) ?? []
-      list.push(mod)
-      grouped.set(week, list)
-    }
-    return Array.from(grouped.entries())
-      .sort((a, b) => a[0] - b[0])
-      .map(([week, mods]) => ({ week, mods }))
-  }, [modulesForDisplay])
+    const sectionIndexMap = new Map<string, number>(
+      sections.map((sec, idx) => [sec.id, idx])
+    )
+    return [...modules].sort((a, b) => {
+      const secA = sectionIndexMap.get(a.section_id) ?? 999
+      const secB = sectionIndexMap.get(b.section_id) ?? 999
+      if (secA !== secB) return secA - secB
+      return 0
+    })
+  }, [modules, sections])
 
   const snapshot = useMemo(
     () =>
@@ -766,6 +833,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         departmentId,
         price,
         discountPercent,
+        sections,
         modules,
       }),
     [
@@ -780,6 +848,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       departmentId,
       price,
       discountPercent,
+      sections,
       modules,
     ],
   )
@@ -826,18 +895,103 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       const newIdx = modulesForDisplay.findIndex((i) => i.id === overIdStr)
       if (oldIdx < 0 || newIdx < 0) return
 
-      const destinationWeek = modulesForDisplay[newIdx]?.week_index ?? 1
+      const destinationSectionId = modulesForDisplay[newIdx]?.section_id ?? sections[0]?.id ?? ''
       const next = arrayMove(modulesForDisplay, oldIdx, newIdx).map((m) =>
-        m.id === activeIdStr ? { ...m, week_index: destinationWeek } : m,
+        m.id === activeIdStr ? { ...m, section_id: destinationSectionId } : m,
       )
       setModules(next)
       setModifiedModuleIds((prev) => new Set([...prev, activeIdStr]))
     }
   }
 
-  const addModule = () => {
+  const addSection = () => {
+    const newSec = makeSection(`Section ${sections.length + 1}`, sections.length)
+    setSections((prev) => [...prev, newSec])
+    setEditingSectionId(newSec.id)
+    setEditingSectionTitle(newSec.title)
+  }
+
+  const startEditingSection = (sec: SectionItem) => {
+    setEditingSectionId(sec.id)
+    setEditingSectionTitle(sec.title)
+  }
+
+  const saveEditingSection = () => {
+    if (!editingSectionId) return
+    const trimmed = editingSectionTitle.trim()
+    if (!trimmed) {
+      toast.error('Section name cannot be empty.')
+      return
+    }
+    setSections((prev) =>
+      prev.map((s) => (s.id === editingSectionId ? { ...s, title: trimmed } : s))
+    )
+    setEditingSectionId(null)
+    setEditingSectionTitle('')
+  }
+
+  const cancelEditingSection = () => {
+    setEditingSectionId(null)
+    setEditingSectionTitle('')
+  }
+
+  const moveSection = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1
+    if (targetIndex < 0 || targetIndex >= sections.length) return
+    const next = [...sections]
+    const temp = next[index]
+    next[index] = next[targetIndex]
+    next[targetIndex] = temp
+    const reordered = next.map((s, idx) => ({ ...s, sort_order: idx }))
+    setSections(reordered)
+  }
+
+  const requestDeleteSection = (sec: SectionItem) => {
+    if (sections.length <= 1) {
+      toast.error('A course must have at least one section.')
+      return
+    }
+    const lessonCount = modules.filter((m) => m.section_id === sec.id).length
+    if (lessonCount > 0) {
+      setConfirmDeleteSection({
+        sectionId: sec.id,
+        title: sec.title,
+        lessonCount,
+      })
+    } else {
+      executeDeleteSection(sec.id)
+    }
+  }
+
+  const executeDeleteSection = (sectionId: string) => {
+    const sec = sections.find((s) => s.id === sectionId)
+    if (!sec) return
+
+    if (sec.dbId) {
+      setDeletedSectionIds((prev) => new Set([...prev, sec.dbId!]))
+    }
+
+    const modsInSec = modules.filter((m) => m.section_id === sectionId)
+    for (const m of modsInSec) {
+      if (m.dbId) {
+        setDeletedModuleIds((prev) => new Set([...prev, m.dbId!]))
+      }
+    }
+
+    setModules((prev) => prev.filter((m) => m.section_id !== sectionId))
+    const remainingSections = sections
+      .filter((s) => s.id !== sectionId)
+      .map((s, idx) => ({ ...s, sort_order: idx }))
+    setSections(remainingSections)
+    setConfirmDeleteSection(null)
+    toast.success(`Section "${sec.title}" deleted.`)
+  }
+
+  const addModule = (sectionId?: string) => {
+    const targetSecId =
+      sectionId ?? activeModule?.section_id ?? sections[0]?.id ?? ''
     const newWeek = activeModule?.week_index ?? 1
-    const m = makeModule(newWeek)
+    const m = makeModule(targetSecId, newWeek)
     setModules((prev) => [...prev, m])
     setActiveId(m.id)
     setModifiedModuleIds((prev) => new Set([...prev, m.id]))
@@ -878,13 +1032,14 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       const activeIdx = modules.findIndex((m) => m.id === activeId)
       const insertAt = activeIdx >= 0 ? activeIdx + 1 : modules.length
       const week = activeModule?.week_index ?? fresh.week_index
-      const withWeek: ModuleItem = { ...fresh, week_index: week }
+      const sectionId = activeModule?.section_id ?? sections[0]?.id ?? ''
+      const withSection: ModuleItem = { ...fresh, section_id: sectionId, week_index: week }
       setModules((prev) => {
         const next = [...prev]
-        next.splice(insertAt, 0, withWeek)
+        next.splice(insertAt, 0, withSection)
         return next
       })
-      setActiveId(withWeek.id)
+      setActiveId(withSection.id)
       setActionError('')
     } catch {
       setActionError('Could not read clipboard or paste lesson.')
@@ -1077,6 +1232,19 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
     if (!title.trim()) { setError('Course title is required.'); return }
     if (!courseCode.trim()) { setError('Course code is required.'); return }
     if (!departmentId) { setError('Department is required.'); return }
+    if (sections.length === 0) { setError('At least one section is required.'); return }
+    for (let sIdx = 0; sIdx < sections.length; sIdx++) {
+      if (!sections[sIdx].title.trim()) {
+        setError(`Section ${sIdx + 1} name cannot be empty.`)
+        return
+      }
+    }
+    for (let mIdx = 0; mIdx < modules.length; mIdx++) {
+      if (!modules[mIdx].title.trim()) {
+        setError(`Lesson ${mIdx + 1} title cannot be empty.`)
+        return
+      }
+    }
     setSaving(true)
     setError('')
     setActionError('')
@@ -1094,6 +1262,8 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
 
     // Capture state for potential rollback
     const backupState = {
+      sections: [...sections],
+      deletedSectionIds: new Set(deletedSectionIds),
       modules: [...modules],
       modifiedModuleIds: new Set(modifiedModuleIds),
       deletedModuleIds: new Set(deletedModuleIds),
@@ -1143,40 +1313,73 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           return
         }
 
-        const { data: existingMods } = await supabase
-          .from('modules')
-          .select('id, sort_order')
-          .eq('course_id', courseId)
-        const sortOrderByModuleId = new Map<string, number>(
-          (existingMods ?? []).map((row) => [
-            row.id as string,
-            Number((row as { sort_order?: number }).sort_order ?? 0),
-          ]),
-        )
+        // Delete sections that were explicitly removed
+        if (deletedSectionIds.size > 0) {
+          const { error: sDelErr } = await supabase
+            .from('sections')
+            .delete()
+            .in('id', Array.from(deletedSectionIds))
+          if (sDelErr) {
+            logSaveFailure('section delete', sDelErr)
+            throw new Error('Failed to delete removed sections.')
+          }
+        }
 
         // Delete modules that were explicitly removed
         if (deletedModuleIds.size > 0) {
           await supabase.from('modules').delete().in('id', Array.from(deletedModuleIds))
         }
 
-        let { data: sectionRow } = await supabase
-          .from('sections')
-          .select('id')
-          .eq('course_id', courseId)
-          .order('sort_order', { ascending: true })
-          .limit(1)
-          .maybeSingle()
-
-        if (!sectionRow) {
-          const { data: newSec } = await supabase
-            .from('sections')
-            .insert({ course_id: courseId, title: 'Course Content', sort_order: 0 })
-            .select('id')
-            .single()
-          sectionRow = newSec
+        // Save / update sections and map client section IDs to database UUIDs
+        const sectionIdToDbId = new Map<string, string>()
+        for (let sIdx = 0; sIdx < sections.length; sIdx++) {
+          const sec = sections[sIdx]
+          if (sec.dbId) {
+            const { error: sUpErr } = await supabase
+              .from('sections')
+              .update({
+                title: sec.title.trim(),
+                sort_order: sIdx,
+              })
+              .eq('id', sec.dbId)
+            if (sUpErr) {
+              logSaveFailure('section update', sUpErr)
+              throw new Error('Failed to update section.')
+            }
+            sectionIdToDbId.set(sec.id, sec.dbId)
+          } else {
+            const { data: newSec, error: sInsErr } = await supabase
+              .from('sections')
+              .insert({
+                course_id: courseId,
+                title: sec.title.trim(),
+                sort_order: sIdx,
+              })
+              .select('id')
+              .single()
+            if (sInsErr || !newSec) {
+              logSaveFailure('section insert', sInsErr ?? new Error('no row'))
+              throw new Error('Failed to create section.')
+            }
+            sec.dbId = newSec.id
+            sectionIdToDbId.set(sec.id, newSec.id)
+          }
         }
 
-        const sectionId = sectionRow?.id ?? null
+        const { data: existingMods } = await supabase
+          .from('modules')
+          .select('id, sort_order, section_id')
+          .eq('course_id', courseId)
+        const existingModMeta = new Map<string, { sort_order: number; section_id: string | null }>(
+          (existingMods ?? []).map((row) => [
+            row.id as string,
+            {
+              sort_order: Number((row as { sort_order?: number }).sort_order ?? 0),
+              section_id: (row as { section_id?: string | null }).section_id ?? null,
+            },
+          ]),
+        )
+
         const modulesToSync: Array<{
           moduleId: string
           moduleType: string
@@ -1184,13 +1387,17 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           quizQuestions: ModuleItem['quiz_questions']
         }> = []
 
-        // Only process modules that were modified or are new
-        for (let i = 0; i < modules.length; i++) {
-          const mod = modules[i]
-          const row = buildModuleRow(mod, courseId, sectionId, i, courseStartsAt)
+        // Process modules in ordered curriculum sequence
+        for (let i = 0; i < modulesForDisplay.length; i++) {
+          const mod = modulesForDisplay[i]
+          const targetSectionDbId = sectionIdToDbId.get(mod.section_id) ?? sections[0]?.dbId ?? null
+          const row = buildModuleRow(mod, courseId, targetSectionDbId, i, courseStartsAt)
 
           if (mod.dbId) {
-            // Check if it's actually modified
+            const meta = existingModMeta.get(mod.dbId)
+            const orderChanged = meta == null || meta.sort_order !== i
+            const sectionChanged = meta == null || meta.section_id !== targetSectionDbId
+
             if (modifiedModuleIds.has(mod.id)) {
               const { error: mErr } = await supabase
                 .from('modules')
@@ -1207,22 +1414,16 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
                 externalLinks: mod.external_links,
                 quizQuestions: mod.quiz_questions,
               })
-            } else {
-              // Update sort order only when it actually changed.
-              const prevSortOrder = sortOrderByModuleId.get(mod.dbId)
-              if (prevSortOrder == null || prevSortOrder !== i) {
-                const { error: sErr } = await supabase
-                  .from('modules')
-                  .update({ sort_order: i })
-                  .eq('id', mod.dbId)
-                if (sErr) {
-                  logSaveFailure('module sort_order update', sErr)
-                  throw new Error('Failed to update lesson order.')
-                }
+            } else if (orderChanged || sectionChanged) {
+              const { error: sErr } = await supabase
+                .from('modules')
+                .update({ sort_order: i, section_id: targetSectionDbId })
+                .eq('id', mod.dbId)
+              if (sErr) {
+                logSaveFailure('module sort_order/section_id update', sErr)
+                throw new Error('Failed to update lesson order.')
               }
             }
-            // Always sync assignment row for persisted modules (not only when modifiedModuleIds fired).
-            // Otherwise assignment-only edits can be skipped if dirty tracking misses the lesson id.
             await syncAssignmentForModule(supabase, mod, mod.dbId)
           } else {
             const { data: dbMod, error: insErr } = await supabase
@@ -1234,7 +1435,6 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
               logSaveFailure('module insert', insErr ?? new Error('no row'))
               throw new Error('Failed to create new lesson.')
             }
-            // Update the local module with the new dbId to prevent duplicate inserts on next save
             mod.dbId = dbMod.id
             await syncModuleSubtypes(supabase, mod, dbMod.id)
             await syncAssignmentForModule(supabase, mod, dbMod.id)
@@ -1265,6 +1465,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
 
         setModifiedModuleIds(new Set())
         setDeletedModuleIds(new Set())
+        setDeletedSectionIds(new Set())
         setBaselineSnapshot(snapshot)
         setSaved(true)
         setTimeout(() => router.push(`/courses/${courseId}`), 800)
@@ -1297,11 +1498,25 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         throw new Error('Failed to create course metadata.')
       }
 
-      const { data: section } = await supabase
-        .from('sections')
-        .insert({ course_id: course.id, title: 'Course Content', sort_order: 0 })
-        .select('id')
-        .single()
+      const sectionIdToDbId = new Map<string, string>()
+      for (let sIdx = 0; sIdx < sections.length; sIdx++) {
+        const sec = sections[sIdx]
+        const { data: newSec, error: sInsErr } = await supabase
+          .from('sections')
+          .insert({
+            course_id: course.id,
+            title: sec.title.trim(),
+            sort_order: sIdx,
+          })
+          .select('id')
+          .single()
+        if (sInsErr || !newSec) {
+          logSaveFailure('section insert (new course)', sInsErr ?? new Error('no row'))
+          throw new Error('Failed to create section for the new course.')
+        }
+        sec.dbId = newSec.id
+        sectionIdToDbId.set(sec.id, newSec.id)
+      }
 
       const modulesToSync: Array<{
         moduleId: string
@@ -1310,9 +1525,10 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         quizQuestions: ModuleItem['quiz_questions']
       }> = []
 
-      for (let i = 0; i < modules.length; i++) {
-        const mod = modules[i]
-        const row = buildModuleRow(mod, course.id, section?.id ?? null, i, courseStartsAt)
+      for (let i = 0; i < modulesForDisplay.length; i++) {
+        const mod = modulesForDisplay[i]
+        const targetSectionDbId = sectionIdToDbId.get(mod.section_id) ?? null
+        const row = buildModuleRow(mod, course.id, targetSectionDbId, i, courseStartsAt)
         const { data: dbMod, error: mErr } = await supabase
           .from('modules')
           .insert(row)
@@ -1351,6 +1567,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
 
       setModifiedModuleIds(new Set())
       setDeletedModuleIds(new Set())
+      setDeletedSectionIds(new Set())
       setBaselineSnapshot(snapshot)
       setSaved(true)
       setTimeout(() => router.push(`/courses/${course.id}`), 1200)
@@ -1361,6 +1578,8 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       toast.error(message)
       
       // Rollback to backup state
+      setSections(backupState.sections)
+      setDeletedSectionIds(backupState.deletedSectionIds)
       setModules(backupState.modules)
       setModifiedModuleIds(backupState.modifiedModuleIds)
       setDeletedModuleIds(backupState.deletedModuleIds)
@@ -1369,7 +1588,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       setDescription(backupState.description)
       setCourseStartsAt(backupState.courseStartsAt)
       setThumbnailUrl(backupState.thumbnailUrl)
-      setDemoVideoUrl(backupState.demoVideoUrl)
+      demoVideoUrl && setDemoVideoUrl(backupState.demoVideoUrl)
       setEnrollmentType(backupState.enrollmentType)
       setSelectedInstructorId(backupState.selectedInstructorId)
       setDepartmentId(backupState.departmentId)
@@ -1710,7 +1929,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         <div className="grid grid-cols-1 gap-6 p-5 sm:p-6 lg:grid-cols-5">
 
           {/* Lesson List (left) */}
-          <div className="space-y-2 lg:col-span-2">
+          <div className="space-y-3 lg:col-span-2">
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
@@ -1720,71 +1939,185 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
                 items={modulesForDisplay.map((m) => m.id)}
                 strategy={verticalListSortingStrategy}
               >
-                <div className="max-h-[67vh] space-y-2 overflow-y-auto pr-1">
-                  {moduleWeekGroups.map((group) => (
-                    <div key={`week-${group.week}`} className="space-y-2">
-                      <div className="flex items-center gap-3 my-2">
-                        <div className="w-full flex items-center">
-                          <div className="grow border-t border-dashed border-slate-300"></div>
-                          <span className="mx-2 text-xs text-slate-400 uppercase tracking-widest">
-                          week {group.week}
-                          </span>
-                          <div className="grow border-t border-dashed border-slate-300"></div>
+                <div className="max-h-[67vh] space-y-3 overflow-y-auto pr-1">
+                  {sections.map((section, secIdx) => {
+                    const sectionMods = modules.filter((m) => m.section_id === section.id)
+                    const isEditingTitle = editingSectionId === section.id
+
+                    return (
+                      <div
+                        key={section.id}
+                        className="rounded-2xl border border-slate-200/90 bg-slate-50/50 p-2.5 shadow-xs transition hover:border-slate-300"
+                      >
+                        {/* Section Header */}
+                        <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white px-3 py-2 shadow-2xs">
+                          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                            <span className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-bold text-blue-700">
+                              {secIdx + 1}
+                            </span>
+                            {isEditingTitle ? (
+                              <div className="flex flex-1 items-center gap-1">
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  value={editingSectionTitle}
+                                  onChange={(e) => setEditingSectionTitle(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') saveEditingSection()
+                                    if (e.key === 'Escape') cancelEditingSection()
+                                  }}
+                                  className="h-7 w-full rounded-md border border-blue-500 bg-white px-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  placeholder="Section name"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={saveEditingSection}
+                                  className="rounded p-1 text-emerald-600 hover:bg-emerald-50"
+                                  title="Save section name"
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={cancelEditingSection}
+                                  className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                                  title="Cancel"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                                <span
+                                  className="truncate text-xs font-semibold text-slate-800"
+                                  title={section.title}
+                                >
+                                  {section.title}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => startEditingSection(section)}
+                                  className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-blue-600"
+                                  title="Edit section name"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            <span className="mr-1 text-[11px] text-slate-400">
+                              {sectionMods.length} {sectionMods.length === 1 ? 'lesson' : 'lessons'}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={secIdx === 0}
+                              onClick={() => moveSection(secIdx, 'up')}
+                              className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 disabled:pointer-events-none"
+                              title="Move section up"
+                            >
+                              <ChevronUp className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={secIdx === sections.length - 1}
+                              onClick={() => moveSection(secIdx, 'down')}
+                              className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 disabled:pointer-events-none"
+                              title="Move section down"
+                            >
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => addModule(section.id)}
+                              className="rounded p-1 text-blue-600 hover:bg-blue-50"
+                              title="Add lesson to this section"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={sections.length <= 1}
+                              onClick={() => requestDeleteSection(section)}
+                              className="rounded p-1 text-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30 disabled:pointer-events-none"
+                              title="Delete section"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                      {group.mods.map((mod) => (
-                        <SortableItem key={mod.id} id={mod.id}>
-                          {/* Padding-left makes room for the absolute grip handle */}
-                          <div
-                            onClick={() => setActiveId(mod.id)}
-                            className={`cursor-pointer select-none rounded-xl border px-3 py-3 pl-8 transition ${
-                              activeId === mod.id
-                                ? 'border-blue-500 bg-blue-50 shadow-sm ring-1 ring-blue-200'
-                                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                            }`}
-                          >
-                            <div className="flex min-w-0 items-center gap-2">
-                              <span
-                                className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500"
-                                title={`Week ${mod.week_index}`}
-                              >
-                                W{mod.week_index}
-                              </span>
-                              <span className={typeColor[mod.type]}>
-                                {mod.type === 'video' && <Video className="w-4 h-4" />}
-                                {mod.type === 'assignment' && <FileText className="w-4 h-4" />}
-                                {mod.type === 'live_session' && <CalendarDays className="w-4 h-4" />}
-                                {mod.type === 'offline_session' && <MapPin className="w-4 h-4" />}
-                                {mod.type === 'mcq' && <ListChecks className="w-4 h-4" />}
-                                {mod.type === 'feedback' && <MessageSquare className="w-4 h-4" />}
-                                {mod.type === 'external_resource' && <ExternalLink className="w-4 h-4" />}
-                              </span>
-                              <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
-                                {mod.title}
-                              </span>
+
+                        {/* Lessons in section */}
+                        <div className="space-y-1.5 min-h-[38px]">
+                          {sectionMods.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 py-3 text-center">
+                              <p className="text-xs text-slate-400 mb-1">No lessons in this section yet.</p>
                               <button
                                 type="button"
-                                onClick={(e) => copyModuleToClipboard(mod, e)}
-                                className="ml-auto shrink-0 rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                                title="Copy lesson"
+                                onClick={() => addModule(section.id)}
+                                className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline"
                               >
-                                <Copy className="h-4 w-4" />
+                                <Plus className="h-3 w-3" /> Add Lesson
                               </button>
                             </div>
-                          </div>
-                        </SortableItem>
-                      ))}
-                    </div>
-                  ))}
+                          ) : (
+                            sectionMods.map((mod) => (
+                              <SortableItem key={mod.id} id={mod.id}>
+                                <div
+                                  onClick={() => setActiveId(mod.id)}
+                                  className={`cursor-pointer select-none rounded-xl border px-3 py-2.5 pl-8 transition ${
+                                    activeId === mod.id
+                                      ? 'border-blue-500 bg-blue-50 shadow-xs ring-1 ring-blue-200'
+                                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  <div className="flex min-w-0 items-center gap-2">
+                                    <span
+                                      className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500"
+                                      title={`Week ${mod.week_index}`}
+                                    >
+                                      W{mod.week_index}
+                                    </span>
+                                    <span className={typeColor[mod.type]}>
+                                      {mod.type === 'video' && <Video className="w-4 h-4" />}
+                                      {mod.type === 'assignment' && <FileText className="w-4 h-4" />}
+                                      {mod.type === 'live_session' && <CalendarDays className="w-4 h-4" />}
+                                      {mod.type === 'offline_session' && <MapPin className="w-4 h-4" />}
+                                      {mod.type === 'mcq' && <ListChecks className="w-4 h-4" />}
+                                      {mod.type === 'feedback' && <MessageSquare className="w-4 h-4" />}
+                                      {mod.type === 'external_resource' && <ExternalLink className="w-4 h-4" />}
+                                    </span>
+                                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
+                                      {mod.title}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => copyModuleToClipboard(mod, e)}
+                                      className="ml-auto shrink-0 rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                                      title="Copy lesson"
+                                    >
+                                      <Copy className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </SortableItem>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </SortableContext>
             </DndContext>
 
             <button
-              onClick={addModule}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 py-2.5 text-sm font-medium text-slate-600 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600"
+              type="button"
+              onClick={addSection}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50/50 py-2.5 text-sm font-medium text-blue-700 transition hover:border-blue-400 hover:bg-blue-100/60"
             >
-              <Plus className="w-4 h-4" /> Add Lesson
+              <FolderPlus className="w-4 h-4" /> Add Section
             </button>
           </div>
 
@@ -1846,8 +2179,25 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
                   />
                 </div>
 
+                {/* Section selection */}
                 <div>
-                  <Label>Week (syllabus group)</Label>
+                  <Label>Section</Label>
+                  <select
+                    value={activeModule.section_id}
+                    onChange={(e) => update({ section_id: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {sections.map((sec, idx) => (
+                      <option key={sec.id} value={sec.id}>
+                        Section {idx + 1}: {sec.title}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-slate-500 mt-1">Choose which section this lesson belongs to.</p>
+                </div>
+
+                <div>
+                  <Label>Week (unlock schedule)</Label>
                   <FieldInput
                     type="number"
                     min={1}
@@ -1858,7 +2208,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
                       update({ week_index: v })
                     }}
                   />
-                  <p className="text-xs text-slate-500 mt-1">Lessons with the same week appear under the same heading.</p>
+                  <p className="text-xs text-slate-500 mt-1">Controls scheduled unlocking (e.g. Week 1, Week 2).</p>
                 </div>
 
                 <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
@@ -2403,6 +2753,23 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         busy={deleting}
         onCancel={() => setConfirmDeleteOpen(false)}
         onConfirm={() => void handleDeleteCourse()}
+      />
+      <ConfirmationDialog
+        open={!!confirmDeleteSection}
+        title="Delete Section?"
+        description={
+          confirmDeleteSection
+            ? `Are you sure you want to delete "${confirmDeleteSection.title}"? This section contains ${confirmDeleteSection.lessonCount} lesson(s), which will also be deleted. This action cannot be undone.`
+            : ''
+        }
+        confirmLabel="Delete section and lessons"
+        confirmVariant="danger"
+        onCancel={() => setConfirmDeleteSection(null)}
+        onConfirm={() => {
+          if (confirmDeleteSection) {
+            executeDeleteSection(confirmDeleteSection.sectionId)
+          }
+        }}
       />
     </div>
   )
