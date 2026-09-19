@@ -1,5 +1,4 @@
 import CourseBuilder from '@/components/CourseBuilder'
-import { AppCard, PageHeader } from '@/components/ui/primitives'
 
 export default async function EditCoursePage({
   params,
@@ -9,12 +8,8 @@ export default async function EditCoursePage({
   const { id } = await params
 
   return (
-    <div className="space-y-4 p-2">
-      <PageHeader title="Edit Course" description="Update title, syllabus, lessons, and publish status." />
-
-      <AppCard className="p-2">
-        <CourseBuilder courseId={id} />
-      </AppCard>
+    <div className="w-full">
+      <CourseBuilder courseId={id} />
     </div>
   )
 }

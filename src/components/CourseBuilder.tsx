@@ -2,50 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import Image from 'next/image'
-import VideoModule from '@/components/VideoModule'
-import { isValidDemoVideoUrl } from '@/lib/video-url'
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable'
-import { SortableItem } from './SortableItem'
-import {
-  Plus,
-  Video,
-  FileText,
-  CalendarDays,
-  MapPin,
-  ListChecks,
-  MessageSquare,
-  ExternalLink,
-  Save,
-  Loader2,
-  CheckCircle2,
-  Trash2,
-  Upload,
-  Copy,
-  ClipboardPaste,
-  Pencil,
-  Check,
-  X,
-  ChevronUp,
-  ChevronDown,
-  FolderPlus,
-} from 'lucide-react'
-import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
+import { Loader2 } from 'lucide-react'
+import { createClient } from '@/utils/supabase/client'
 import {
   deriveUnlockMode,
   fromDatetimeLocal,
@@ -53,110 +12,40 @@ import {
   unlockAtForWeek,
 } from '@/lib/unlock-schedule'
 import { syncQuizAndExternalForModules } from '@/lib/sync-module-quiz-external'
-import { parseQuizCsv } from '@/lib/parse-quiz-csv'
-import { toRenderableImageUrl } from '@/lib/drive-image'
 import { ROLES } from '@/lib/roles'
 import { GENERAL_DEPARTMENT_NAME } from '@/lib/course-departments'
 import { toast } from 'sonner'
 import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog'
 import { firstEmbeddedAssignment } from '@/lib/embedded-assignment'
-import { getModuleContentUrl, getModuleQuizSettings, getModuleSessionFields } from '@/lib/module-subtypes'
+import {
+  getModuleContentUrl,
+  getModuleQuizSettings,
+  getModuleSessionFields,
+} from '@/lib/module-subtypes'
 
-interface SectionItem {
-  /** Client/dnd id (equals DB uuid when loaded from server) */
-  id: string
-  /** Set when row exists in DB */
-  dbId: string | null
-  title: string
-  sort_order: number
-}
-
-type ModuleType =
-  | 'video'
-  | 'assignment'
-  | 'live_session'
-  | 'offline_session'
-  | 'mcq'
-  | 'feedback'
-  | 'external_resource'
-
-interface ModuleItem {
-  /** Client/dnd id (equals DB uuid when loaded from server) */
-  id: string
-  /** Set when row exists in DB */
-  dbId: string | null
-  /** Section ID (client id or DB uuid) this module belongs to */
-  section_id: string
-  title: string
-  type: ModuleType
-  /** 1-based week number for syllabus grouping */
-  week_index: number
-  /** Use course starts_at + week schedule, or set available_from manually */
-  unlock_mode: 'auto' | 'manual'
-  /** datetime-local when unlock_mode is manual */
-  available_from: string
-  /** Extra copy (e.g. offline session instructions) */
-  description: string
-  content_url: string
-  session_location: string
-  session_start_at: string
-  session_end_at: string
-  max_score: number
-  passing_score: number
-  deadline_at: string
-  assignment_description: string
-  /** Pass score percent required to pass (module type mcq) */
-  quiz_passing_pct: number
-  /** Instructor toggle: learners can retake this quiz */
-  quiz_allow_retest: boolean
-  /** Minutes for learner timer (null = no limit); browser-enforced only */
-  quiz_time_limit_minutes: number | null
-  /** Shuffle question order per learner (deterministic on lesson page) */
-  quiz_randomize_questions: boolean
-  external_links: { id: string; label: string; url: string }[]
-  quiz_questions: {
-    id: string
-    prompt: string
-    options: { id: string; label: string; is_correct: boolean }[]
-  }[]
-}
-
-/** TODO: Use a more secure random UUID generator in production. */
-
-/** randomUUID() is missing on non-secure origins (e.g. http://192.168.x.x). */
-function newClientId(): string {
-  const c = globalThis.crypto
-  if (c && typeof c.randomUUID === 'function') {
-    return c.randomUUID()
-  }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
-    const r = (Math.random() * 16) | 0
-    const v = ch === 'x' ? r : (r & 0x3) | 0x8
-    return v.toString(16)
-  })
-}
-
-function normalizeModuleType(t: string): ModuleType {
-  if (
-    t === 'video' ||
-    t === 'assignment' ||
-    t === 'live_session' ||
-    t === 'offline_session' ||
-    t === 'mcq' ||
-    t === 'feedback' ||
-    t === 'external_resource'
-  ) {
-    return t
-  }
-  return 'video'
-}
+import {
+  SectionItem,
+  ModuleItem,
+  makeSection,
+  makeModule,
+  remapModuleIds,
+  parseModuleFromClipboard,
+  serializeModuleForClipboard,
+  normalizeModuleType,
+  sortBySortOrder,
+  newClientId,
+} from './course-builder/types'
+import { CourseBuilderHeader, StudioTab } from './course-builder/CourseBuilderHeader'
+import { CurriculumTab } from './course-builder/CurriculumTab'
+import { CourseDetailsTab } from './course-builder/CourseDetailsTab'
+import { PricingAccessTab } from './course-builder/PricingAccessTab'
 
 function buildModuleRow(
   mod: ModuleItem,
   courseId: string,
   sectionId: string | null,
   sortIndex: number,
-  courseStartsAtStr: string
+  courseStartsAtStr: string,
 ) {
   const startsAtIso = fromDatetimeLocal(courseStartsAtStr)
   const weekIndex = Math.max(1, Math.trunc(Number(mod.week_index)) || 1)
@@ -243,7 +132,7 @@ async function syncModuleSubtypes(
 async function syncAssignmentForModule(
   supabase: ReturnType<typeof createClient>,
   mod: ModuleItem,
-  moduleId: string
+  moduleId: string,
 ) {
   if (mod.type !== 'assignment') {
     await supabase.from('assignments').delete().eq('module_id', moduleId)
@@ -260,7 +149,7 @@ async function syncAssignmentForModule(
     allow_late: false,
     late_penalty_pct: 0,
   }
-  // Upsert on module_id needs a UNIQUE on module_id; use update-or-insert instead (see migration assignments_module_id_key).
+
   const { data: existingRows, error: selErr } = await supabase
     .from('assignments')
     .select('id')
@@ -287,181 +176,10 @@ async function syncAssignmentForModule(
   }
 }
 
-const makeSection = (title = 'New Section', sortOrder = 0): SectionItem => ({
-  id: newClientId(),
-  dbId: null,
-  title,
-  sort_order: sortOrder,
-})
-
-const makeModule = (sectionId = '', weekIndex = 1): ModuleItem => ({
-  id: newClientId(),
-  dbId: null,
-  section_id: sectionId,
-  title: 'New Lesson',
-  type: 'video',
-  week_index: Math.max(1, Math.trunc(Number(weekIndex)) || 1),
-  unlock_mode: 'auto',
-  available_from: '',
-  description: '',
-  content_url: '',
-  session_location: '',
-  session_start_at: '',
-  session_end_at: '',
-  max_score: 100,
-  passing_score: 60,
-  deadline_at: '',
-  assignment_description: '',
-  quiz_passing_pct: 60,
-  quiz_allow_retest: true,
-  quiz_time_limit_minutes: null,
-  quiz_randomize_questions: false,
-  external_links: [{ id: newClientId(), label: '', url: '' }],
-  quiz_questions: [],
-})
-
-const MODULE_CLIPBOARD_PREFIX = 'peregrine:coursebuilder:module:v1:'
-
-function remapModuleIds(mod: ModuleItem): ModuleItem {
-  return {
-    ...mod,
-    id: newClientId(),
-    dbId: null,
-    external_links: (mod.external_links ?? []).map((l) => ({
-      ...l,
-      id: newClientId(),
-    })),
-    quiz_questions: (mod.quiz_questions ?? []).map((q) => ({
-      ...q,
-      id: newClientId(),
-      options: (q.options ?? []).map((o) => ({
-        ...o,
-        id: newClientId(),
-      })),
-    })),
-  }
-}
-
-function serializeModuleForClipboard(mod: ModuleItem): string {
-  return MODULE_CLIPBOARD_PREFIX + JSON.stringify(mod)
-}
-
-function parseModuleFromClipboard(text: string): ModuleItem | null {
-  if (!text.startsWith(MODULE_CLIPBOARD_PREFIX)) return null
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(text.slice(MODULE_CLIPBOARD_PREFIX.length))
-  } catch {
-    return null
-  }
-  if (!parsed || typeof parsed !== 'object') return null
-  const p = parsed as Partial<ModuleItem>
-  const base = makeModule('', 1)
-  const merged: ModuleItem = {
-    ...base,
-    ...p,
-    id: typeof p.id === 'string' ? p.id : base.id,
-    dbId: null,
-    section_id: typeof p.section_id === 'string' ? p.section_id : base.section_id,
-    week_index: Math.max(1, Math.trunc(Number(p.week_index)) || 1),
-    type: normalizeModuleType(String(p.type ?? base.type)),
-    unlock_mode: p.unlock_mode === 'manual' ? 'manual' : 'auto',
-    available_from: typeof p.available_from === 'string' ? p.available_from : base.available_from,
-    description: typeof p.description === 'string' ? p.description : base.description,
-    content_url: typeof p.content_url === 'string' ? p.content_url : base.content_url,
-    session_location:
-      typeof p.session_location === 'string' ? p.session_location : base.session_location,
-    session_start_at:
-      typeof p.session_start_at === 'string' ? p.session_start_at : base.session_start_at,
-    session_end_at: typeof p.session_end_at === 'string' ? p.session_end_at : base.session_end_at,
-    max_score: typeof p.max_score === 'number' ? p.max_score : base.max_score,
-    passing_score: typeof p.passing_score === 'number' ? p.passing_score : base.passing_score,
-    deadline_at: typeof p.deadline_at === 'string' ? p.deadline_at : base.deadline_at,
-    assignment_description:
-      typeof p.assignment_description === 'string'
-        ? p.assignment_description
-        : base.assignment_description,
-    quiz_passing_pct:
-      typeof p.quiz_passing_pct === 'number' ? p.quiz_passing_pct : base.quiz_passing_pct,
-    quiz_allow_retest: p.quiz_allow_retest !== false,
-    quiz_time_limit_minutes:
-      p.quiz_time_limit_minutes === null || typeof p.quiz_time_limit_minutes === 'number'
-        ? p.quiz_time_limit_minutes
-        : base.quiz_time_limit_minutes,
-    quiz_randomize_questions: Boolean(p.quiz_randomize_questions),
-    external_links: Array.isArray(p.external_links)
-      ? p.external_links.map((l) => ({
-          id: typeof l.id === 'string' ? l.id : newClientId(),
-          label: typeof l.label === 'string' ? l.label : '',
-          url: typeof l.url === 'string' ? l.url : '',
-        }))
-      : base.external_links,
-    quiz_questions: Array.isArray(p.quiz_questions)
-      ? p.quiz_questions.map((q) => ({
-          id: typeof q.id === 'string' ? q.id : newClientId(),
-          prompt: typeof q.prompt === 'string' ? q.prompt : '',
-          options: Array.isArray(q.options)
-            ? q.options.map((o) => ({
-                id: typeof o.id === 'string' ? o.id : newClientId(),
-                label: typeof o.label === 'string' ? o.label : '',
-                is_correct: Boolean(o.is_correct),
-              }))
-            : [],
-        }))
-      : base.quiz_questions,
-  }
-  if (merged.external_links.length === 0) {
-    merged.external_links = [{ id: newClientId(), label: '', url: '' }]
-  }
-  return merged
-}
-
-const TYPE_OPTIONS: { value: ModuleType; label: string; icon: React.ReactNode }[] = [
-  { value: 'video', label: 'Video', icon: <Video className="w-4 h-4" /> },
-  { value: 'assignment', label: 'Assignment', icon: <FileText className="w-4 h-4" /> },
-  { value: 'live_session', label: 'Live Session', icon: <CalendarDays className="w-4 h-4" /> },
-  { value: 'offline_session', label: 'Offline Session', icon: <MapPin className="w-4 h-4" /> },
-  { value: 'mcq', label: 'Quiz', icon: <ListChecks className="w-4 h-4" /> },
-  { value: 'feedback', label: 'Feedback', icon: <MessageSquare className="w-4 h-4" /> },
-  { value: 'external_resource', label: 'External resource', icon: <ExternalLink className="w-4 h-4" /> },
-]
-
-const typeColor: Record<ModuleType, string> = {
-  video: 'text-blue-600',
-  assignment: 'text-green-600',
-  live_session: 'text-purple-600',
-  offline_session: 'text-amber-600',
-  mcq: 'text-cyan-600',
-  feedback: 'text-rose-600',
-  external_resource: 'text-indigo-600',
-}
-
-function sortBySortOrder<T extends { sort_order?: number }>(arr: T[]): T[] {
-  return [...arr].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-}
-
-function Label({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <label className={`mb-1.5 block text-sm font-semibold text-slate-700 ${className ?? ''}`}>
-      {children}
-    </label>
-  )
-}
-
-function FieldInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  const { className, ...rest } = props
-  return (
-    <input
-      {...rest}
-      className={`w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${className ?? ''}`}
-    />
-  )
-}
-
 function mapDbModuleToItem(
   row: Record<string, unknown>,
   courseStartsIso: string | null,
-  fallbackSectionId: string
+  fallbackSectionId: string,
 ): ModuleItem {
   const id = row.id as string
   const sectionId = (row.section_id as string) || fallbackSectionId
@@ -557,6 +275,8 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
   const router = useRouter()
   const queryClient = useQueryClient()
 
+  const [activeTab, setActiveTab] = useState<StudioTab>(courseId ? 'curriculum' : 'details')
+
   const [title, setTitle] = useState('')
   const [courseCode, setCourseCode] = useState('')
   const [description, setDescription] = useState('')
@@ -570,11 +290,10 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
   const [departmentId, setDepartmentId] = useState('')
   const [price, setPrice] = useState<string>('0')
   const [discountPercent, setDiscountPercent] = useState<string>('0')
+  const [status, setStatus] = useState<'draft' | 'published'>('draft')
 
   const [sections, setSections] = useState<SectionItem[]>(() => [makeSection('Course Content', 0)])
   const [deletedSectionIds, setDeletedSectionIds] = useState<Set<string>>(new Set())
-  const [editingSectionId, setEditingSectionId] = useState<string | null>(null)
-  const [editingSectionTitle, setEditingSectionTitle] = useState<string>('')
   const [confirmDeleteSection, setConfirmDeleteSection] = useState<{
     sectionId: string
     title: string
@@ -589,9 +308,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
 
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  /** Validation only (title / course code); shown above the form */
   const [error, setError] = useState('')
-  /** Generic save/publish/delete failure; details go to console */
   const [actionError, setActionError] = useState('')
   const [loading, setLoading] = useState(!!courseId)
   const [loadError, setLoadError] = useState('')
@@ -608,13 +325,6 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
   const [thumbnailUploadError, setThumbnailUploadError] = useState('')
   const [thumbnailPreviewVersion, setThumbnailPreviewVersion] = useState(() => Date.now())
 
-  const thumbnailPreviewSrc = useMemo(() => {
-    const base = toRenderableImageUrl(thumbnailUrl)
-    if (!base) return ''
-    const joiner = base.includes('?') ? '&' : '?'
-    return `${base}${joiner}v=${thumbnailPreviewVersion}`
-  }, [thumbnailUrl, thumbnailPreviewVersion])
-
   useEffect(() => {
     if (!courseId && modules.length === 0 && sections.length > 0) {
       const initialMod = makeModule(sections[0].id, 1)
@@ -627,9 +337,15 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
     let cancelled = false
     ;(async () => {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
       if (!user || cancelled) return
-      const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
       if (cancelled) return
       const admin = prof?.role === ROLES.ADMIN
       setIsAdmin(!!admin)
@@ -672,7 +388,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       const { data: course, error: cErr } = await supabase
         .from('courses')
         .select(
-          'title, course_code, description, thumbnail_url, demo_video_url, starts_at, enrollment_type, status, instructor_id, department_id, price, discount_percent'
+          'title, course_code, description, thumbnail_url, demo_video_url, starts_at, enrollment_type, status, instructor_id, department_id, price, discount_percent',
         )
         .eq('id', courseId)
         .single()
@@ -691,9 +407,10 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       setThumbnailUrl(course.thumbnail_url ?? '')
       setDemoVideoUrl((course.demo_video_url as string) ?? '')
       setCourseStartsAt(
-        course.starts_at ? toDatetimeLocalValue(course.starts_at as string) : ''
+        course.starts_at ? toDatetimeLocalValue(course.starts_at as string) : '',
       )
       setEnrollmentType((course.enrollment_type as 'open' | 'invite_only') ?? 'invite_only')
+      setStatus((course.status as 'draft' | 'published') ?? 'draft')
       setDepartmentId((course.department_id as string) ?? '')
       setPrice(String((course as { price?: number }).price ?? 0))
       setDiscountPercent(String((course as { discount_percent?: number }).discount_percent ?? 0))
@@ -736,7 +453,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           module_external_links ( label, url, sort_order ),
           quiz_questions ( id, prompt, sort_order, quiz_options ( id, label, is_correct, sort_order ) ),
           assignments ( id, description, max_score, passing_score, deadline_at )
-        `
+        `,
         )
         .eq('course_id', courseId)
         .order('sort_order', { ascending: true })
@@ -751,7 +468,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       const courseStartsIso = (course.starts_at as string | null) ?? null
       const defaultSectionId = loadedSections[0]?.id ?? ''
       const mapped = (mods ?? []).map((row) =>
-        mapDbModuleToItem(row as Record<string, unknown>, courseStartsIso, defaultSectionId)
+        mapDbModuleToItem(row as Record<string, unknown>, courseStartsIso, defaultSectionId),
       )
       const loadedModules = mapped.length === 0 ? [makeModule(defaultSectionId)] : mapped
       setModules(loadedModules)
@@ -785,17 +502,16 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
     if (courseId || selectedInstructorId) return
     ;(async () => {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
       if (user) setSelectedInstructorId(user.id)
     })()
   }, [courseId, selectedInstructorId])
 
   useEffect(() => {
-    // Bust browser cache when thumbnail URL changes so preview always refreshes.
     setThumbnailPreviewVersion(Date.now())
   }, [thumbnailUrl])
-
-  const activeModule = modules.find((m) => m.id === activeId) ?? null
 
   useEffect(() => {
     if (modules.length === 0) {
@@ -806,18 +522,6 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       setActiveId(modules[0].id)
     }
   }, [modules, activeId])
-
-  const modulesForDisplay = useMemo(() => {
-    const sectionIndexMap = new Map<string, number>(
-      sections.map((sec, idx) => [sec.id, idx])
-    )
-    return [...modules].sort((a, b) => {
-      const secA = sectionIndexMap.get(a.section_id) ?? 999
-      const secB = sectionIndexMap.get(b.section_id) ?? 999
-      if (secA !== secB) return secA - secB
-      return 0
-    })
-  }, [modules, sections])
 
   const snapshot = useMemo(
     () =>
@@ -872,67 +576,15 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [hasUnsavedChanges])
 
-  const activeUnlockPreview = useMemo(() => {
-    if (!activeModule || activeModule.unlock_mode !== 'auto' || !courseStartsAt.trim()) return null
-    return unlockAtForWeek(courseStartsAt, activeModule.week_index)
-  }, [activeModule, courseStartsAt])
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 5 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  )
-
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event
-    if (over && active.id !== over.id) {
-      const activeIdStr = String(active.id)
-      const overIdStr = String(over.id)
-      const oldIdx = modulesForDisplay.findIndex((i) => i.id === activeIdStr)
-      const newIdx = modulesForDisplay.findIndex((i) => i.id === overIdStr)
-      if (oldIdx < 0 || newIdx < 0) return
-
-      const destinationSectionId = modulesForDisplay[newIdx]?.section_id ?? sections[0]?.id ?? ''
-      const next = arrayMove(modulesForDisplay, oldIdx, newIdx).map((m) =>
-        m.id === activeIdStr ? { ...m, section_id: destinationSectionId } : m,
-      )
-      setModules(next)
-      setModifiedModuleIds((prev) => new Set([...prev, activeIdStr]))
-    }
-  }
-
   const addSection = () => {
     const newSec = makeSection(`Section ${sections.length + 1}`, sections.length)
     setSections((prev) => [...prev, newSec])
-    setEditingSectionId(newSec.id)
-    setEditingSectionTitle(newSec.title)
   }
 
-  const startEditingSection = (sec: SectionItem) => {
-    setEditingSectionId(sec.id)
-    setEditingSectionTitle(sec.title)
-  }
-
-  const saveEditingSection = () => {
-    if (!editingSectionId) return
-    const trimmed = editingSectionTitle.trim()
-    if (!trimmed) {
-      toast.error('Section name cannot be empty.')
-      return
-    }
+  const updateSectionTitle = (sectionId: string, newTitle: string) => {
     setSections((prev) =>
-      prev.map((s) => (s.id === editingSectionId ? { ...s, title: trimmed } : s))
+      prev.map((s) => (s.id === sectionId ? { ...s, title: newTitle } : s)),
     )
-    setEditingSectionId(null)
-    setEditingSectionTitle('')
-  }
-
-  const cancelEditingSection = () => {
-    setEditingSectionId(null)
-    setEditingSectionTitle('')
   }
 
   const moveSection = (index: number, direction: 'up' | 'down') => {
@@ -942,8 +594,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
     const temp = next[index]
     next[index] = next[targetIndex]
     next[targetIndex] = temp
-    const reordered = next.map((s, idx) => ({ ...s, sort_order: idx }))
-    setSections(reordered)
+    setSections(next.map((s, idx) => ({ ...s, sort_order: idx })))
   }
 
   const requestDeleteSection = (sec: SectionItem) => {
@@ -988,8 +639,8 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
   }
 
   const addModule = (sectionId?: string) => {
-    const targetSecId =
-      sectionId ?? activeModule?.section_id ?? sections[0]?.id ?? ''
+    const activeModule = modules.find((m) => m.id === activeId)
+    const targetSecId = sectionId ?? activeModule?.section_id ?? sections[0]?.id ?? ''
     const newWeek = activeModule?.week_index ?? 1
     const m = makeModule(targetSecId, newWeek)
     setModules((prev) => [...prev, m])
@@ -1010,11 +661,19 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
     })
   }
 
+  const updateActiveModule = (patch: Partial<ModuleItem>) => {
+    setModules((prev) =>
+      prev.map((m) => (m.id === activeId ? { ...m, ...patch } : m)),
+    )
+    setModifiedModuleIds((prev) => new Set([...prev, activeId]))
+  }
+
   const copyModuleToClipboard = async (mod: ModuleItem, e: React.MouseEvent) => {
     e.stopPropagation()
     try {
       await navigator.clipboard.writeText(serializeModuleForClipboard(mod))
       setActionError('')
+      toast.success('Lesson copied to clipboard.')
     } catch {
       setActionError('Could not copy lesson to clipboard.')
     }
@@ -1026,11 +685,13 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       const parsed = parseModuleFromClipboard(text)
       if (!parsed) {
         setActionError('Clipboard does not contain a copied lesson.')
+        toast.error('Clipboard does not contain a copied lesson.')
         return
       }
       const fresh = remapModuleIds(parsed)
       const activeIdx = modules.findIndex((m) => m.id === activeId)
       const insertAt = activeIdx >= 0 ? activeIdx + 1 : modules.length
+      const activeModule = modules.find((m) => m.id === activeId)
       const week = activeModule?.week_index ?? fresh.week_index
       const sectionId = activeModule?.section_id ?? sections[0]?.id ?? ''
       const withSection: ModuleItem = { ...fresh, section_id: sectionId, week_index: week }
@@ -1040,137 +701,17 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         return next
       })
       setActiveId(withSection.id)
+      setModifiedModuleIds((prev) => new Set([...prev, withSection.id]))
       setActionError('')
+      toast.success('Lesson pasted successfully.')
     } catch {
       setActionError('Could not read clipboard or paste lesson.')
     }
   }
 
-  const update = (patch: Partial<ModuleItem>) => {
-    setModules((prev) =>
-      prev.map((m) => (m.id === activeId ? { ...m, ...patch } : m))
-    )
-    setModifiedModuleIds((prev) => new Set([...prev, activeId]))
-  }
-
-  function patchActiveQuiz(
-    patchFn: (q: ModuleItem['quiz_questions']) => ModuleItem['quiz_questions'],
-  ) {
-    setModules((prev) =>
-      prev.map((m) => (m.id === activeId ? { ...m, quiz_questions: patchFn(m.quiz_questions) } : m)),
-    )
-    setModifiedModuleIds((prev) => new Set([...prev, activeId]))
-  }
-
-  function addQuizQuestion() {
-    patchActiveQuiz((qs) => [
-      ...qs,
-      {
-        id: newClientId(),
-        prompt: '',
-        options: [
-          { id: newClientId(), label: '', is_correct: true },
-          { id: newClientId(), label: '', is_correct: false },
-        ],
-      },
-    ])
-  }
-
-  function updateQuizQuestion(qid: string, prompt: string) {
-    patchActiveQuiz((qs) => qs.map((q) => (q.id === qid ? { ...q, prompt } : q)))
-  }
-
-  function removeQuizQuestion(qid: string) {
-    patchActiveQuiz((qs) => qs.filter((q) => q.id !== qid))
-  }
-
-  function addQuizOption(qid: string) {
-    patchActiveQuiz((qs) =>
-      qs.map((q) =>
-        q.id === qid
-          ? { ...q, options: [...q.options, { id: newClientId(), label: '', is_correct: false }] }
-          : q,
-      ),
-    )
-  }
-
-  function updateQuizOption(qid: string, oid: string, label: string) {
-    patchActiveQuiz((qs) =>
-      qs.map((q) =>
-        q.id === qid
-          ? { ...q, options: q.options.map((o) => (o.id === oid ? { ...o, label } : o)) }
-          : q,
-      ),
-    )
-  }
-
-  function setCorrectOption(qid: string, oid: string) {
-    patchActiveQuiz((qs) =>
-      qs.map((q) =>
-        q.id === qid
-          ? { ...q, options: q.options.map((o) => ({ ...o, is_correct: o.id === oid })) }
-          : q,
-      ),
-    )
-  }
-
-  function removeQuizOption(qid: string, oid: string) {
-    patchActiveQuiz((qs) =>
-      qs.map((q) => {
-        if (q.id !== qid) return q
-        const next = q.options.filter((o) => o.id !== oid)
-        if (next.length === 0) return q
-        if (!next.some((o) => o.is_correct)) next[0] = { ...next[0], is_correct: true }
-        return { ...q, options: next }
-      }),
-    )
-  }
-
-  const [quizCsvPaste, setQuizCsvPaste] = useState('')
-  const [quizCsvWarnings, setQuizCsvWarnings] = useState<string[]>([])
-
-  function appendQuestionsFromCsv(text: string) {
-    const res = parseQuizCsv(text)
-    setQuizCsvWarnings(res.warnings)
-    if (res.questions.length === 0) return
-    patchActiveQuiz((qs) => [
-      ...qs,
-      ...res.questions.map((q) => ({
-        id: newClientId(),
-        prompt: q.prompt,
-        options: q.options.map((o) => ({
-          id: newClientId(),
-          label: o.label,
-          is_correct: o.is_correct,
-        })),
-      })),
-    ])
-  }
-
-  function patchExternalLinks(
-    patchFn: (links: ModuleItem['external_links']) => ModuleItem['external_links'],
-  ) {
-    setModules((prev) =>
-      prev.map((m) =>
-        m.id === activeId ? { ...m, external_links: patchFn(m.external_links) } : m,
-      ),
-    )
-    setModifiedModuleIds((prev) => new Set([...prev, activeId]))
-  }
-
-  function addExternalLinkRow() {
-    patchExternalLinks((ls) => [...ls, { id: newClientId(), label: '', url: '' }])
-  }
-
-  function updateExternalLinkRow(linkId: string, patch: Partial<{ label: string; url: string }>) {
-    patchExternalLinks((ls) => ls.map((l) => (l.id === linkId ? { ...l, ...patch } : l)))
-  }
-
-  function removeExternalLinkRow(linkId: string) {
-    patchExternalLinks((ls) => {
-      const next = ls.filter((l) => l.id !== linkId)
-      return next.length ? next : [{ id: newClientId(), label: '', url: '' }]
-    })
+  const reorderModules = (newModules: ModuleItem[], movedId: string) => {
+    setModules(newModules)
+    setModifiedModuleIds((prev) => new Set([...prev, movedId]))
   }
 
   async function uploadThumbnail(file: File) {
@@ -1198,50 +739,44 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         return
       }
       setThumbnailUrl(payload.fileUrl)
+      toast.success('Thumbnail uploaded successfully.')
     } finally {
       setThumbnailUploading(false)
     }
   }
 
-  const logSaveFailure = (label: string, err: unknown) => {
-    if (err && typeof err === 'object') {
-      const asRecord = err as Record<string, unknown>
-      const normalized = {
-        message: asRecord.message,
-        code: asRecord.code,
-        details: asRecord.details,
-        hint: asRecord.hint,
-        status: asRecord.status,
-        name: asRecord.name,
-      }
-      console.error(`[CourseBuilder] ${label}`, normalized, err)
+  const handleSave = async (publish: boolean) => {
+    if (!title.trim()) {
+      setError('Course title is required.')
+      setActiveTab('details')
       return
     }
-    console.error(`[CourseBuilder] ${label}`, err)
-  }
-
-  const getErrorMessage = (err: unknown, fallback: string) => {
-    if (err && typeof err === 'object' && 'message' in err) {
-      const message = (err as { message?: unknown }).message
-      if (typeof message === 'string' && message.trim()) return message
+    if (!courseCode.trim()) {
+      setError('Course code is required.')
+      setActiveTab('details')
+      return
     }
-    return fallback
-  }
-
-  const handleSave = async (publish: boolean) => {
-    if (!title.trim()) { setError('Course title is required.'); return }
-    if (!courseCode.trim()) { setError('Course code is required.'); return }
-    if (!departmentId) { setError('Department is required.'); return }
-    if (sections.length === 0) { setError('At least one section is required.'); return }
+    if (!departmentId) {
+      setError('Department is required.')
+      setActiveTab('details')
+      return
+    }
+    if (sections.length === 0) {
+      setError('At least one section is required.')
+      setActiveTab('curriculum')
+      return
+    }
     for (let sIdx = 0; sIdx < sections.length; sIdx++) {
       if (!sections[sIdx].title.trim()) {
         setError(`Section ${sIdx + 1} name cannot be empty.`)
+        setActiveTab('curriculum')
         return
       }
     }
     for (let mIdx = 0; mIdx < modules.length; mIdx++) {
       if (!modules[mIdx].title.trim()) {
         setError(`Lesson ${mIdx + 1} title cannot be empty.`)
+        setActiveTab('curriculum')
         return
       }
     }
@@ -1250,17 +785,17 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
     setActionError('')
 
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
     if (!user) {
       const message = 'You are not signed in. Please log in and try again.'
-      logSaveFailure('save: not authenticated', new Error('No session'))
       setActionError(message)
       toast.error(message)
       setSaving(false)
       return
     }
 
-    // Capture state for potential rollback
     const backupState = {
       sections: [...sections],
       deletedSectionIds: new Set(deletedSectionIds),
@@ -1285,6 +820,16 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       const priceNumber = Math.max(0, Number(price) || 0)
       const discountNumber = Math.max(0, Math.min(100, Math.round(Number(discountPercent) || 0)))
 
+      const sectionIndexMap = new Map<string, number>(
+        sections.map((sec, idx) => [sec.id, idx]),
+      )
+      const modulesForDisplay = [...modules].sort((a, b) => {
+        const secA = sectionIndexMap.get(a.section_id) ?? 999
+        const secB = sectionIndexMap.get(b.section_id) ?? 999
+        if (secA !== secB) return secA - secB
+        return 0
+      })
+
       if (courseId) {
         const updatePayload: Record<string, unknown> = {
           title: title.trim(),
@@ -1303,34 +848,25 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           updatePayload.instructor_id = selectedInstructorId
         }
 
-        const { error: upErr } = await supabase.from('courses').update(updatePayload).eq('id', courseId)
+        const { error: upErr } = await supabase
+          .from('courses')
+          .update(updatePayload)
+          .eq('id', courseId)
 
-        if (upErr) {
-          logSaveFailure('course update', upErr)
-          const message = getErrorMessage(upErr, 'Could not update course.')
-          setActionError(message)
-          toast.error(message)
-          return
-        }
+        if (upErr) throw upErr
 
-        // Delete sections that were explicitly removed
         if (deletedSectionIds.size > 0) {
           const { error: sDelErr } = await supabase
             .from('sections')
             .delete()
             .in('id', Array.from(deletedSectionIds))
-          if (sDelErr) {
-            logSaveFailure('section delete', sDelErr)
-            throw new Error('Failed to delete removed sections.')
-          }
+          if (sDelErr) throw sDelErr
         }
 
-        // Delete modules that were explicitly removed
         if (deletedModuleIds.size > 0) {
           await supabase.from('modules').delete().in('id', Array.from(deletedModuleIds))
         }
 
-        // Save / update sections and map client section IDs to database UUIDs
         const sectionIdToDbId = new Map<string, string>()
         for (let sIdx = 0; sIdx < sections.length; sIdx++) {
           const sec = sections[sIdx]
@@ -1342,10 +878,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
                 sort_order: sIdx,
               })
               .eq('id', sec.dbId)
-            if (sUpErr) {
-              logSaveFailure('section update', sUpErr)
-              throw new Error('Failed to update section.')
-            }
+            if (sUpErr) throw sUpErr
             sectionIdToDbId.set(sec.id, sec.dbId)
           } else {
             const { data: newSec, error: sInsErr } = await supabase
@@ -1357,10 +890,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
               })
               .select('id')
               .single()
-            if (sInsErr || !newSec) {
-              logSaveFailure('section insert', sInsErr ?? new Error('no row'))
-              throw new Error('Failed to create section.')
-            }
+            if (sInsErr || !newSec) throw sInsErr ?? new Error('Failed to create section')
             sec.dbId = newSec.id
             sectionIdToDbId.set(sec.id, newSec.id)
           }
@@ -1387,10 +917,10 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           quizQuestions: ModuleItem['quiz_questions']
         }> = []
 
-        // Process modules in ordered curriculum sequence
         for (let i = 0; i < modulesForDisplay.length; i++) {
           const mod = modulesForDisplay[i]
-          const targetSectionDbId = sectionIdToDbId.get(mod.section_id) ?? sections[0]?.dbId ?? null
+          const targetSectionDbId =
+            sectionIdToDbId.get(mod.section_id) ?? sections[0]?.dbId ?? null
           const row = buildModuleRow(mod, courseId, targetSectionDbId, i, courseStartsAt)
 
           if (mod.dbId) {
@@ -1403,10 +933,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
                 .from('modules')
                 .update(row)
                 .eq('id', mod.dbId)
-              if (mErr) {
-                logSaveFailure('module update', mErr)
-                throw new Error('Failed to update lesson.')
-              }
+              if (mErr) throw mErr
               await syncModuleSubtypes(supabase, mod, mod.dbId)
               modulesToSync.push({
                 moduleId: mod.dbId,
@@ -1419,10 +946,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
                 .from('modules')
                 .update({ sort_order: i, section_id: targetSectionDbId })
                 .eq('id', mod.dbId)
-              if (sErr) {
-                logSaveFailure('module sort_order/section_id update', sErr)
-                throw new Error('Failed to update lesson order.')
-              }
+              if (sErr) throw sErr
             }
             await syncAssignmentForModule(supabase, mod, mod.dbId)
           } else {
@@ -1431,10 +955,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
               .insert(row)
               .select('id')
               .single()
-            if (insErr || !dbMod) {
-              logSaveFailure('module insert', insErr ?? new Error('no row'))
-              throw new Error('Failed to create new lesson.')
-            }
+            if (insErr || !dbMod) throw insErr ?? new Error('Failed to create lesson')
             mod.dbId = dbMod.id
             await syncModuleSubtypes(supabase, mod, dbMod.id)
             await syncAssignmentForModule(supabase, mod, dbMod.id)
@@ -1447,11 +968,10 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
           }
         }
 
-        // Perform batch sync for all modified/new modules
         if (modulesToSync.length > 0) {
           await syncQuizAndExternalForModules(
             supabase,
-            modulesToSync.map(m => ({
+            modulesToSync.map((m) => ({
               moduleId: m.moduleId,
               moduleType: m.moduleType,
               externalLinks: m.externalLinks.map(({ label, url }) => ({ label, url })),
@@ -1459,7 +979,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
                 prompt: q.prompt,
                 options: q.options.map((o) => ({ label: o.label, is_correct: o.is_correct })),
               })),
-            }))
+            })),
           )
         }
 
@@ -1467,14 +987,16 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         setDeletedModuleIds(new Set())
         setDeletedSectionIds(new Set())
         setBaselineSnapshot(snapshot)
+        setStatus(publish ? 'published' : 'draft')
         setSaved(true)
+        toast.success(publish ? 'Course published!' : 'Draft saved successfully!')
         setTimeout(() => router.push(`/courses/${courseId}`), 800)
         return
       }
 
+      // Creating new course
       const ownerId = isAdmin && selectedInstructorId ? selectedInstructorId : user.id
-
-      const { data: course, error: courseErr } = await supabase
+      const { data: newCourse, error: courseErr } = await supabase
         .from('courses')
         .insert({
           instructor_id: ownerId,
@@ -1493,10 +1015,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         .select('id')
         .single()
 
-      if (courseErr || !course) {
-        logSaveFailure('course insert', courseErr ?? new Error('no row'))
-        throw new Error('Failed to create course metadata.')
-      }
+      if (courseErr || !newCourse) throw courseErr ?? new Error('Failed to create course metadata')
 
       const sectionIdToDbId = new Map<string, string>()
       for (let sIdx = 0; sIdx < sections.length; sIdx++) {
@@ -1504,16 +1023,13 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
         const { data: newSec, error: sInsErr } = await supabase
           .from('sections')
           .insert({
-            course_id: course.id,
+            course_id: newCourse.id,
             title: sec.title.trim(),
             sort_order: sIdx,
           })
           .select('id')
           .single()
-        if (sInsErr || !newSec) {
-          logSaveFailure('section insert (new course)', sInsErr ?? new Error('no row'))
-          throw new Error('Failed to create section for the new course.')
-        }
+        if (sInsErr || !newSec) throw sInsErr ?? new Error('Failed to create section')
         sec.dbId = newSec.id
         sectionIdToDbId.set(sec.id, newSec.id)
       }
@@ -1528,17 +1044,14 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       for (let i = 0; i < modulesForDisplay.length; i++) {
         const mod = modulesForDisplay[i]
         const targetSectionDbId = sectionIdToDbId.get(mod.section_id) ?? null
-        const row = buildModuleRow(mod, course.id, targetSectionDbId, i, courseStartsAt)
+        const row = buildModuleRow(mod, newCourse.id, targetSectionDbId, i, courseStartsAt)
         const { data: dbMod, error: mErr } = await supabase
           .from('modules')
           .insert(row)
           .select('id')
           .single()
 
-        if (mErr || !dbMod) {
-          logSaveFailure('module insert (new course)', mErr ?? new Error('no row'))
-          throw new Error('Failed to create lesson for the new course.')
-        }
+        if (mErr || !dbMod) throw mErr ?? new Error('Failed to create lesson')
         mod.dbId = dbMod.id
         await syncModuleSubtypes(supabase, mod, dbMod.id)
         await syncAssignmentForModule(supabase, mod, dbMod.id)
@@ -1553,7 +1066,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       if (modulesToSync.length > 0) {
         await syncQuizAndExternalForModules(
           supabase,
-          modulesToSync.map(m => ({
+          modulesToSync.map((m) => ({
             moduleId: m.moduleId,
             moduleType: m.moduleType,
             externalLinks: m.externalLinks.map(({ label, url }) => ({ label, url })),
@@ -1561,7 +1074,7 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
               prompt: q.prompt,
               options: q.options.map((o) => ({ label: o.label, is_correct: o.is_correct })),
             })),
-          }))
+          })),
         )
       }
 
@@ -1570,14 +1083,18 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       setDeletedSectionIds(new Set())
       setBaselineSnapshot(snapshot)
       setSaved(true)
-      setTimeout(() => router.push(`/courses/${course.id}`), 1200)
+      toast.success(publish ? 'Course created and published!' : 'Course draft created successfully!')
+      setTimeout(() => router.push(`/courses/${newCourse.id}`), 1200)
     } catch (e: unknown) {
-      logSaveFailure('save (exception)', e)
-      const message = getErrorMessage(e, 'Something went wrong. Changes could not be saved.')
-      setActionError(message)
-      toast.error(message)
-      
-      // Rollback to backup state
+      console.error('[CourseBuilder] Save failed:', e)
+      const msg =
+        e && typeof e === 'object' && 'message' in e
+          ? String((e as { message?: unknown }).message)
+          : 'Failed to save changes. Reverting to previous state.'
+      setActionError(msg)
+      toast.error(msg)
+
+      // Rollback
       setSections(backupState.sections)
       setDeletedSectionIds(backupState.deletedSectionIds)
       setModules(backupState.modules)
@@ -1588,13 +1105,12 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
       setDescription(backupState.description)
       setCourseStartsAt(backupState.courseStartsAt)
       setThumbnailUrl(backupState.thumbnailUrl)
-      demoVideoUrl && setDemoVideoUrl(backupState.demoVideoUrl)
+      backupState.demoVideoUrl && setDemoVideoUrl(backupState.demoVideoUrl)
       setEnrollmentType(backupState.enrollmentType)
       setSelectedInstructorId(backupState.selectedInstructorId)
       setDepartmentId(backupState.departmentId)
       setPrice(backupState.price)
       setDiscountPercent(backupState.discountPercent)
-
     } finally {
       setSaving(false)
     }
@@ -1610,8 +1126,8 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
     const { error: dErr } = await supabase.from('courses').delete().eq('id', courseId)
     setDeleting(false)
     if (dErr) {
-      console.error('[CourseBuilder] delete course', dErr)
-      setActionError('Something went wrong.')
+      console.error('[CourseBuilder] Delete course error:', dErr)
+      setActionError('Could not delete course.')
       toast.error(dErr.message || 'Could not delete course.')
       return
     }
@@ -1622,1147 +1138,132 @@ export default function CourseBuilder({ courseId }: { courseId?: string }) {
 
   if (courseId && loading) {
     return (
-      <div className="flex items-center justify-center py-20 text-slate-600 gap-2">
-        <Loader2 className="w-6 h-6 animate-spin" aria-hidden />
-        Loading course…
+      <div className="flex flex-col items-center justify-center py-28 text-slate-500 gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" aria-hidden />
+        <span className="text-sm font-semibold">Loading course builder...</span>
       </div>
     )
   }
 
   if (courseId && loadError) {
     return (
-      <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-4 rounded-lg">
-        {loadError}
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-800 text-sm">
+        <h3 className="font-bold text-base mb-1">Failed to load course</h3>
+        <p>{loadError}</p>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-[calc(100vh-140px)] pb-12">
+      {/* Sticky Studio Header */}
+      <CourseBuilderHeader
+        courseId={courseId}
+        title={title}
+        courseCode={courseCode}
+        isPublished={status === 'published'}
+        hasUnsavedChanges={hasUnsavedChanges}
+        saving={saving}
+        saved={saved}
+        deleting={deleting}
+        actionError={actionError}
+        activeTab={activeTab}
+        lessonCount={modules.length}
+        onTabChange={setActiveTab}
+        onSave={handleSave}
+        onRequestDeleteCourse={() => setConfirmDeleteOpen(true)}
+      />
+
+      {/* Validation Error Banner */}
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+        <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-700 shadow-2xs">
           {error}
         </div>
       )}
 
-      {/* Course Details — save/publish errors use actionError near the action buttons */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 bg-linear-to-r from-slate-50 to-white px-5 py-4 sm:px-6">
-          <h2 className="text-lg font-semibold text-slate-900">
-            {courseId ? 'Edit course' : 'Course Details'}
-          </h2>
-          <p className="mt-1 text-xs text-slate-500">
-            Set your course metadata before building lessons.
-          </p>
-        </div>
-        <div className="space-y-5 p-5 sm:p-6">
+      {/* Tab 1: Curriculum Workbench */}
+      {activeTab === 'curriculum' && (
+        <CurriculumTab
+          sections={sections}
+          modules={modules}
+          activeId={activeId}
+          courseStartsAt={courseStartsAt}
+          onSelectModule={setActiveId}
+          onAddModule={addModule}
+          onDeleteModule={removeModule}
+          onUpdateActiveModule={updateActiveModule}
+          onCopyModule={copyModuleToClipboard}
+          onPasteModule={pasteModuleFromClipboard}
+          onReorderModules={reorderModules}
+          onAddSection={addSection}
+          onUpdateSectionTitle={updateSectionTitle}
+          onMoveSection={moveSection}
+          onRequestDeleteSection={requestDeleteSection}
+        />
+      )}
 
-        {isAdmin && (
-          <div>
-            <Label>Instructor</Label>
-            {instructorChoices.length > 0 ? (
-              <select
-                value={selectedInstructorId}
-                onChange={(e) => setSelectedInstructorId(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {instructorChoices.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.full_name?.trim() || 'Unnamed'} ({p.role})
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                Loading instructors… If this stays empty, ensure the admin migration for profile access is applied.
-              </p>
-            )}
-            <p className="text-xs text-slate-500 mt-1">
-              Course owner appears in the catalog and receives grading access.
-            </p>
-          </div>
-        )}
+      {/* Tab 2: Course Details */}
+      {activeTab === 'details' && (
+        <CourseDetailsTab
+          title={title}
+          setTitle={setTitle}
+          courseCode={courseCode}
+          setCourseCode={setCourseCode}
+          description={description}
+          setDescription={setDescription}
+          courseStartsAt={courseStartsAt}
+          setCourseStartsAt={setCourseStartsAt}
+          thumbnailUrl={thumbnailUrl}
+          setThumbnailUrl={setThumbnailUrl}
+          demoVideoUrl={demoVideoUrl}
+          setDemoVideoUrl={setDemoVideoUrl}
+          departmentId={departmentId}
+          setDepartmentId={setDepartmentId}
+          departmentOptions={departmentOptions}
+          isAdmin={isAdmin}
+          selectedInstructorId={selectedInstructorId}
+          setSelectedInstructorId={setSelectedInstructorId}
+          instructorChoices={instructorChoices}
+          thumbnailUploading={thumbnailUploading}
+          thumbnailUploadError={thumbnailUploadError}
+          onUploadThumbnail={uploadThumbnail}
+          thumbnailPreviewVersion={thumbnailPreviewVersion}
+        />
+      )}
 
-        <div>
-          <Label>Course Title *</Label>
-          <FieldInput
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Introduction to Web Development"
-          />
-        </div>
+      {/* Tab 3: Pricing & Access */}
+      {activeTab === 'pricing' && (
+        <PricingAccessTab
+          price={price}
+          setPrice={setPrice}
+          discountPercent={discountPercent}
+          setDiscountPercent={setDiscountPercent}
+          enrollmentType={enrollmentType}
+          setEnrollmentType={setEnrollmentType}
+        />
+      )}
 
-        <div>
-          <Label>Course code *</Label>
-          <FieldInput
-            type="text"
-            value={courseCode}
-            onChange={(e) => setCourseCode(e.target.value)}
-            placeholder="e.g. CS101-A"
-            autoComplete="off"
-            spellCheck={false}
-          />
-          <p className="text-xs text-slate-500 mt-1">
-            Unique identifier for this course. Shown on the course page and catalog. Case-insensitive uniqueness.
-          </p>
-        </div>
-
-        <div>
-          <Label>Department *</Label>
-          {departmentOptions.length > 0 ? (
-            <select
-              value={departmentId}
-              onChange={(e) => setDepartmentId(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {departmentOptions.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <p className="text-sm text-slate-500">Loading departments…</p>
-          )}
-          <p className="text-xs text-slate-500 mt-1">Used to group this course in the catalog.</p>
-        </div>
-
-        <div>
-          <Label>Description</Label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={3}
-            placeholder="What will learners achieve in this course?"
-            className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <Label>Course Price (₹)</Label>
-            <FieldInput
-              type="number"
-              min={0}
-              step={1}
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              placeholder="0 for free"
-            />
-            <p className="text-xs text-slate-500 mt-1">
-              Set to 0 to make this course free. Price is in Indian Rupees.
-            </p>
-          </div>
-          <div>
-            <Label>Discount (%)</Label>
-            <FieldInput
-              type="number"
-              min={0}
-              max={100}
-              step={1}
-              value={discountPercent}
-              onChange={(e) => setDiscountPercent(e.target.value)}
-              placeholder="0"
-              disabled={(Number(price) || 0) <= 0}
-            />
-            {(Number(price) || 0) > 0 ? (
-              <p className="text-xs text-slate-500 mt-1">
-                Learners see <span className="line-through">₹{Math.round(Number(price) || 0)}</span>{' '}
-                <span className="font-semibold text-emerald-700">
-                  ₹{Math.round(((Number(price) || 0) * (100 - Math.max(0, Math.min(100, Number(discountPercent) || 0)))) / 100)}
-                </span>
-                {(Number(discountPercent) || 0) > 0 && (
-                  <> ({Math.round(Number(discountPercent) || 0)}% off)</>
-                )}
-              </p>
-            ) : (
-              <p className="text-xs text-emerald-700 mt-1">Free course — no payment required to enroll.</p>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <Label>Course start (for week-based unlocks)</Label>
-            <FieldInput
-              type="datetime-local"
-              value={courseStartsAt}
-              onChange={(e) => setCourseStartsAt(e.target.value)}
-            />
-            <p className="text-xs text-slate-500 mt-1">
-              Week 1 unlocks at this time; each higher week adds 7 days. Leave empty if you only use custom dates per lesson.
-            </p>
-          </div>
-          <div className="group relative">
-            <Label>Thumbnail image URL</Label>
-            {thumbnailUrl && (
-              <div className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 hidden w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-xl group-hover:block group-focus-within:block">
-                <Image
-                  src={thumbnailPreviewSrc}
-                  alt="Course thumbnail preview"
-                  width={224}
-                  height={128}
-                  className="h-32 w-full rounded-lg object-cover"
-                />
-                <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-slate-500">
-                  Thumbnail preview
-                </p>
-              </div>
-            )}
-            <FieldInput
-              type="url"
-              value={thumbnailUrl}
-              onChange={(e) => setThumbnailUrl(e.target.value)}
-              placeholder="https://…"
-            />
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
-                {thumbnailUploading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                ) : (
-                  <Upload className="h-4 w-4" aria-hidden />
-                )}
-                {thumbnailUploading ? 'Uploading thumbnail...' : 'Upload thumbnail'}
-                <input
-                  type="file"
-                  className="sr-only"
-                  accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/svg+xml"
-                  disabled={thumbnailUploading}
-                  onChange={(e) => {
-                    const picked = e.target.files?.[0]
-                    e.target.value = ''
-                    if (!picked) return
-                    void uploadThumbnail(picked)
-                  }}
-                />
-              </label>
-              {thumbnailUrl && (
-                <a
-                  href={thumbnailUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs font-medium text-blue-600 hover:underline"
-                >
-                  Open uploaded thumbnail
-                </a>
-              )}
-            </div>
-            {thumbnailUploadError && (
-              <p className="mt-2 text-xs font-medium text-red-600">{thumbnailUploadError}</p>
-            )}
-            <p className="text-xs text-slate-500 mt-1">
-              Paste a public URL, or upload an image to Google Drive to auto-fill this field. Hover this area to preview.
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>Demo Video URL</Label>
-            {demoVideoUrl.trim() && (
-              <button
-                type="button"
-                onClick={() => setDemoVideoUrl('')}
-                className="text-xs font-medium text-slate-500 hover:text-red-600 transition-colors"
-              >
-                Clear video
-              </button>
-            )}
-          </div>
-          <FieldInput
-            type="url"
-            value={demoVideoUrl}
-            onChange={(e) => setDemoVideoUrl(e.target.value)}
-            placeholder="https://www.youtube.com/watch?v=... or https://vimeo.com/..."
-          />
-          <p className="text-xs text-slate-500">
-            Paste a YouTube or Vimeo link to use as the course introductory demo video.
-          </p>
-
-          {demoVideoUrl.trim() && (
-            <div className="mt-3 max-w-xl">
-              {isValidDemoVideoUrl(demoVideoUrl) ? (
-                <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm bg-black">
-                  <div className="flex items-center justify-between bg-slate-900 px-3 py-1.5 text-xs text-slate-300">
-                    <span className="font-medium text-slate-200">Demo Video Player Preview</span>
-                    <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-blue-400">
-                      {demoVideoUrl.includes('vimeo') ? 'Vimeo' : 'YouTube'}
-                    </span>
-                  </div>
-                  <VideoModule contentUrl={demoVideoUrl.trim()} />
-                </div>
-              ) : (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                  <p className="font-semibold">Unsupported video format</p>
-                  <p className="mt-0.5 text-amber-700">
-                    Only <strong>YouTube</strong> and <strong>Vimeo</strong> URLs are supported. Please check the URL format.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div>
-          <Label>Enrollment Type</Label>
-          <select
-            value={enrollmentType}
-            onChange={(e) => setEnrollmentType(e.target.value as 'open' | 'invite_only')}
-            className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="open">Open — anyone can enroll</option>
-            <option value="invite_only">Invite Only</option>
-          </select>
-        </div>
-        </div>
-      </div>
-
-      {/* Syllabus Builder */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 bg-linear-to-r from-slate-50 to-white px-5 py-4 sm:px-6">
-          <h2 className="text-lg font-semibold text-slate-900">Syllabus Builder</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            Add lessons, reorder with drag-and-drop, then configure each lesson.
-          </p>
-        </div>
-        <div className="grid grid-cols-1 gap-6 p-5 sm:p-6 lg:grid-cols-5">
-
-          {/* Lesson List (left) */}
-          <div className="space-y-3 lg:col-span-2">
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              <SortableContext
-                items={modulesForDisplay.map((m) => m.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="max-h-[67vh] space-y-3 overflow-y-auto pr-1">
-                  {sections.map((section, secIdx) => {
-                    const sectionMods = modules.filter((m) => m.section_id === section.id)
-                    const isEditingTitle = editingSectionId === section.id
-
-                    return (
-                      <div
-                        key={section.id}
-                        className="rounded-2xl border border-slate-200/90 bg-slate-50/50 p-2.5 shadow-xs transition hover:border-slate-300"
-                      >
-                        {/* Section Header */}
-                        <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white px-3 py-2 shadow-2xs">
-                          <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                            <span className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-bold text-blue-700">
-                              {secIdx + 1}
-                            </span>
-                            {isEditingTitle ? (
-                              <div className="flex flex-1 items-center gap-1">
-                                <input
-                                  type="text"
-                                  autoFocus
-                                  value={editingSectionTitle}
-                                  onChange={(e) => setEditingSectionTitle(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') saveEditingSection()
-                                    if (e.key === 'Escape') cancelEditingSection()
-                                  }}
-                                  className="h-7 w-full rounded-md border border-blue-500 bg-white px-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                  placeholder="Section name"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={saveEditingSection}
-                                  className="rounded p-1 text-emerald-600 hover:bg-emerald-50"
-                                  title="Save section name"
-                                >
-                                  <Check className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={cancelEditingSection}
-                                  className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                                  title="Cancel"
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                                <span
-                                  className="truncate text-xs font-semibold text-slate-800"
-                                  title={section.title}
-                                >
-                                  {section.title}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => startEditingSection(section)}
-                                  className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-blue-600"
-                                  title="Edit section name"
-                                >
-                                  <Pencil className="h-3 w-3" />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-0.5 shrink-0">
-                            <span className="mr-1 text-[11px] text-slate-400">
-                              {sectionMods.length} {sectionMods.length === 1 ? 'lesson' : 'lessons'}
-                            </span>
-                            <button
-                              type="button"
-                              disabled={secIdx === 0}
-                              onClick={() => moveSection(secIdx, 'up')}
-                              className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 disabled:pointer-events-none"
-                              title="Move section up"
-                            >
-                              <ChevronUp className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={secIdx === sections.length - 1}
-                              onClick={() => moveSection(secIdx, 'down')}
-                              className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 disabled:pointer-events-none"
-                              title="Move section down"
-                            >
-                              <ChevronDown className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => addModule(section.id)}
-                              className="rounded p-1 text-blue-600 hover:bg-blue-50"
-                              title="Add lesson to this section"
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={sections.length <= 1}
-                              onClick={() => requestDeleteSection(section)}
-                              className="rounded p-1 text-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30 disabled:pointer-events-none"
-                              title="Delete section"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Lessons in section */}
-                        <div className="space-y-1.5 min-h-[38px]">
-                          {sectionMods.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 py-3 text-center">
-                              <p className="text-xs text-slate-400 mb-1">No lessons in this section yet.</p>
-                              <button
-                                type="button"
-                                onClick={() => addModule(section.id)}
-                                className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline"
-                              >
-                                <Plus className="h-3 w-3" /> Add Lesson
-                              </button>
-                            </div>
-                          ) : (
-                            sectionMods.map((mod) => (
-                              <SortableItem key={mod.id} id={mod.id}>
-                                <div
-                                  onClick={() => setActiveId(mod.id)}
-                                  className={`cursor-pointer select-none rounded-xl border px-3 py-2.5 pl-8 transition ${
-                                    activeId === mod.id
-                                      ? 'border-blue-500 bg-blue-50 shadow-xs ring-1 ring-blue-200'
-                                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                                  }`}
-                                >
-                                  <div className="flex min-w-0 items-center gap-2">
-                                    <span
-                                      className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500"
-                                      title={`Week ${mod.week_index}`}
-                                    >
-                                      W{mod.week_index}
-                                    </span>
-                                    <span className={typeColor[mod.type]}>
-                                      {mod.type === 'video' && <Video className="w-4 h-4" />}
-                                      {mod.type === 'assignment' && <FileText className="w-4 h-4" />}
-                                      {mod.type === 'live_session' && <CalendarDays className="w-4 h-4" />}
-                                      {mod.type === 'offline_session' && <MapPin className="w-4 h-4" />}
-                                      {mod.type === 'mcq' && <ListChecks className="w-4 h-4" />}
-                                      {mod.type === 'feedback' && <MessageSquare className="w-4 h-4" />}
-                                      {mod.type === 'external_resource' && <ExternalLink className="w-4 h-4" />}
-                                    </span>
-                                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
-                                      {mod.title}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => copyModuleToClipboard(mod, e)}
-                                      className="ml-auto shrink-0 rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                                      title="Copy lesson"
-                                    >
-                                      <Copy className="h-4 w-4" />
-                                    </button>
-                                  </div>
-                                </div>
-                              </SortableItem>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </SortableContext>
-            </DndContext>
-
-            <button
-              type="button"
-              onClick={addSection}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50/50 py-2.5 text-sm font-medium text-blue-700 transition hover:border-blue-400 hover:bg-blue-100/60"
-            >
-              <FolderPlus className="w-4 h-4" /> Add Section
-            </button>
-          </div>
-
-          {/* Config Panel (right) */}
-          <div className="lg:col-span-3">
-            {activeModule ? (
-              <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="font-semibold text-slate-800">Configure Lesson</h3>
-                  <div className="flex items-center gap-0.5">
-                    <button
-                      type="button"
-                      onClick={() => void pasteModuleFromClipboard()}
-                      className="rounded p-1 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
-                      title="Paste copied lesson after this one"
-                    >
-                      <ClipboardPaste className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeModule(activeModule.id)}
-                      className="rounded p-1 text-red-400 transition hover:bg-red-50 hover:text-red-600"
-                      title="Delete lesson"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Type selector */}
-                <div>
-                  <Label>Lesson Type</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {TYPE_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => update({ type: opt.value })}
-                        className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
-                          activeModule.type === opt.value
-                            ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
-                            : 'bg-white border-slate-300 text-slate-700 hover:border-blue-400 hover:text-blue-600'
-                        }`}
-                      >
-                        {opt.icon} {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Lesson Title */}
-                <div>
-                  <Label>Lesson Title</Label>
-                  <FieldInput
-                    type="text"
-                    value={activeModule.title}
-                    onChange={(e) => update({ title: e.target.value })}
-                    placeholder="Enter lesson title"
-                  />
-                </div>
-
-                {/* Section selection */}
-                <div>
-                  <Label>Section</Label>
-                  <select
-                    value={activeModule.section_id}
-                    onChange={(e) => update({ section_id: e.target.value })}
-                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {sections.map((sec, idx) => (
-                      <option key={sec.id} value={sec.id}>
-                        Section {idx + 1}: {sec.title}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-slate-500 mt-1">Choose which section this lesson belongs to.</p>
-                </div>
-
-                <div>
-                  <Label>Week (unlock schedule)</Label>
-                  <FieldInput
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={activeModule.week_index}
-                    onChange={(e) => {
-                      const v = Math.max(1, Math.trunc(Number(e.target.value)) || 1)
-                      update({ week_index: v })
-                    }}
-                  />
-                  <p className="text-xs text-slate-500 mt-1">Controls scheduled unlocking (e.g. Week 1, Week 2).</p>
-                </div>
-
-                <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-                  <Label>When this lesson unlocks</Label>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <label className="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
-                      <input
-                        type="radio"
-                        name={`unlock-${activeModule.id}`}
-                        checked={activeModule.unlock_mode === 'auto'}
-                        onChange={() => update({ unlock_mode: 'auto' })}
-                      />
-                      From course start + week (default)
-                    </label>
-                    <label className="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
-                      <input
-                        type="radio"
-                        name={`unlock-${activeModule.id}`}
-                        checked={activeModule.unlock_mode === 'manual'}
-                        onChange={() => update({ unlock_mode: 'manual' })}
-                      />
-                      Custom date and time
-                    </label>
-                  </div>
-                  {activeModule.unlock_mode === 'auto' && (
-                    <p className="text-xs text-slate-600">
-                      {activeUnlockPreview ? (
-                        <>
-                          Learners can open this lesson starting{' '}
-                          <strong>{new Date(activeUnlockPreview).toLocaleString()}</strong>.
-                        </>
-                      ) : (
-                        <>
-                          Set <strong>Course start</strong> above to preview automatic unlock, or choose custom.
-                        </>
-                      )}
-                    </p>
-                  )}
-                  {activeModule.unlock_mode === 'manual' && (
-                    <div>
-                      <FieldInput
-                        type="datetime-local"
-                        value={activeModule.available_from}
-                        onChange={(e) => update({ available_from: e.target.value })}
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* Video */}
-                {activeModule.type === 'video' && (
-                  <div>
-                    <Label>Video URL (YouTube or Vimeo)</Label>
-                    <FieldInput
-                      type="url"
-                      value={activeModule.content_url}
-                      onChange={(e) => update({ content_url: e.target.value })}
-                      placeholder="https://www.youtube.com/watch?v=..."
-                    />
-                  </div>
-                )}
-
-                {/* Live Session */}
-                {activeModule.type === 'live_session' && (
-                  <div className="space-y-3">
-                    <div>
-                      <Label>Meeting Link</Label>
-                      <FieldInput
-                        type="url"
-                        value={activeModule.content_url}
-                        onChange={(e) => update({ content_url: e.target.value })}
-                        placeholder="https://meet.google.com/..."
-                      />
-                    </div>
-                    <div>
-                      <Label>Session start</Label>
-                      <FieldInput
-                        type="datetime-local"
-                        value={activeModule.session_start_at}
-                        onChange={(e) => update({ session_start_at: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <Label>Session end {!activeModule.session_end_at && '(optional)'}</Label>
-                      <FieldInput
-                        type="datetime-local"
-                        value={activeModule.session_end_at}
-                        onChange={(e) => update({ session_end_at: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Offline session */}
-                {activeModule.type === 'offline_session' && (
-                  <div className="space-y-3">
-                    <div>
-                      <Label>Description (what to bring, agenda, …)</Label>
-                      <textarea
-                        value={activeModule.description}
-                        onChange={(e) => update({ description: e.target.value })}
-                        rows={4}
-                        placeholder="Describe the in-person session for learners."
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <Label>Location / venue</Label>
-                      <FieldInput
-                        type="text"
-                        value={activeModule.session_location}
-                        onChange={(e) => update({ session_location: e.target.value })}
-                        placeholder="Room, building, address…"
-                      />
-                    </div>
-                    <div>
-                      <Label>Session start</Label>
-                      <FieldInput
-                        type="datetime-local"
-                        value={activeModule.session_start_at}
-                        onChange={(e) => update({ session_start_at: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <Label>Session end {!activeModule.session_end_at && '(optional)'}</Label>
-                      <FieldInput
-                        type="datetime-local"
-                        value={activeModule.session_end_at}
-                        onChange={(e) => update({ session_end_at: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* External resource: shared description + multiple links (no completion tracking) */}
-                {activeModule.type === 'external_resource' && (
-                  <div className="space-y-3">
-                    <div>
-                      <Label>Description (shared for all links)</Label>
-                      <textarea
-                        value={activeModule.description}
-                        onChange={(e) => update({ description: e.target.value })}
-                        rows={4}
-                        placeholder="Context for learners before they open the links below."
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Links</Label>
-                      {activeModule.external_links.map((link) => (
-                        <div key={link.id} className="flex flex-col sm:flex-row gap-2 items-start">
-                          <FieldInput
-                            type="text"
-                            value={link.label}
-                            onChange={(e) => updateExternalLinkRow(link.id, { label: e.target.value })}
-                            placeholder="Label (e.g. Reading)"
-                            className="sm:max-w-45"
-                          />
-                          <FieldInput
-                            type="url"
-                            value={link.url}
-                            onChange={(e) => updateExternalLinkRow(link.id, { url: e.target.value })}
-                            placeholder="https://…"
-                            className="flex-1"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeExternalLinkRow(link.id)}
-                            className="shrink-0 rounded-lg px-2 py-2 text-sm text-red-600 hover:bg-red-50"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={addExternalLinkRow}
-                        className="flex items-center gap-1 text-sm text-indigo-600 font-medium"
-                      >
-                        <Plus className="w-4 h-4" /> Add link
-                      </button>
-                      <p className="text-xs text-slate-500">
-                        External resources are not marked complete in the course outline.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Quiz (mcq): builder */}
-                {activeModule.type === 'mcq' && (
-                  <div className="space-y-4">
-                    <div>
-                      <Label>Introduction (shown above the quiz)</Label>
-                      <textarea
-                        value={activeModule.description}
-                        onChange={(e) => update({ description: e.target.value })}
-                        rows={3}
-                        placeholder="Instructions or context for learners."
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <Label>Passing score (% correct)</Label>
-                      <FieldInput
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={activeModule.quiz_passing_pct}
-                        onChange={(e) =>
-                          update({
-                            quiz_passing_pct: Math.min(
-                              100,
-                              Math.max(0, Math.trunc(Number(e.target.value)) || 0),
-                            ),
-                          })
-                        }
-                      />
-                      <p className="text-xs text-slate-500 mt-1">
-                        Learners see pass status after submit. Best score is kept per learner.
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                      <label className="flex items-start gap-2 text-sm text-slate-800">
-                        <input
-                          type="checkbox"
-                          className="mt-0.5"
-                          checked={activeModule.quiz_allow_retest}
-                          onChange={(e) => update({ quiz_allow_retest: e.target.checked })}
-                        />
-                        <span>
-                          Allow learners to retake this quiz
-                          <span className="mt-0.5 block text-xs text-slate-500">
-                            If disabled, learners can submit only once.
-                          </span>
-                        </span>
-                      </label>
-                    </div>
-                    <div className="rounded-xl border border-cyan-100 bg-cyan-50/40 p-3 space-y-2">
-                      <p className="text-xs font-semibold text-cyan-900">Exam-style settings</p>
-                      <div>
-                        <Label>Time limit (minutes)</Label>
-                        <FieldInput
-                          type="number"
-                          min={1}
-                          max={1440}
-                          placeholder="e.g. 60 — leave empty for no limit"
-                          value={activeModule.quiz_time_limit_minutes ?? ''}
-                          onChange={(e) => {
-                            const v = e.target.value.trim()
-                            if (v === '') {
-                              update({ quiz_time_limit_minutes: null })
-                              return
-                            }
-                            const n = Math.trunc(Number(v))
-                            if (!Number.isFinite(n) || n < 1) {
-                              update({ quiz_time_limit_minutes: null })
-                              return
-                            }
-                            update({ quiz_time_limit_minutes: Math.min(1440, n) })
-                          }}
-                        />
-                        <p className="text-xs text-slate-500 mt-1">
-                          Shown as a countdown for learners (browser only; not enforced server-side in v1).
-                        </p>
-                      </div>
-                      <label className="flex items-start gap-2 text-sm text-slate-800">
-                        <input
-                          type="checkbox"
-                          className="mt-0.5"
-                          checked={activeModule.quiz_randomize_questions}
-                          onChange={(e) => update({ quiz_randomize_questions: e.target.checked })}
-                        />
-                        <span>
-                          Randomize question order for each learner
-                          <span className="mt-0.5 block text-xs text-slate-500">
-                            Order is stable per learner but different from the list below—reduces simple
-                            answer-key sharing.
-                          </span>
-                        </span>
-                      </label>
-                      <p className="text-xs text-slate-600">
-                        <span className="font-medium text-slate-700">Recommended for exams:</span> set a time
-                        limit (e.g. 60 minutes) and enable randomization above.
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 space-y-2">
-                      <Label>Bulk import from CSV</Label>
-                      <p className="text-xs text-slate-600">
-                        Use a header row:{' '}
-                        <span className="font-mono text-[11px]">
-                          Question Text, Correct Answer, Option A, Option B, …
-                        </span>
-                        . Correct Answer can be a letter (A, B, …) or text matching an option.
-                      </p>
-                      <div className="flex flex-wrap gap-2 items-center">
-                        <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50">
-                          <Upload className="w-4 h-4" />
-                          Choose .csv file
-                          <input
-                            type="file"
-                            accept=".csv,text/csv,text/plain"
-                            className="hidden"
-                            onChange={(e) => {
-                              const f = e.target.files?.[0]
-                              e.target.value = ''
-                              if (!f) return
-                              const reader = new FileReader()
-                              reader.onload = () => {
-                                appendQuestionsFromCsv(String(reader.result ?? ''))
-                              }
-                              reader.readAsText(f)
-                            }}
-                          />
-                        </label>
-                      </div>
-                      <textarea
-                        value={quizCsvPaste}
-                        onChange={(e) => setQuizCsvPaste(e.target.value)}
-                        rows={3}
-                        placeholder="Or paste CSV here (including header row)…"
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-mono text-slate-900"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          appendQuestionsFromCsv(quizCsvPaste)
-                          setQuizCsvPaste('')
-                        }}
-                        className="rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-900"
-                      >
-                        Append questions from paste
-                      </button>
-                      {quizCsvWarnings.length > 0 && (
-                        <ul className="list-disc pl-5 text-xs text-amber-800 space-y-0.5">
-                          {quizCsvWarnings.map((w, i) => (
-                            <li key={i}>{w}</li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <Label className="mb-0">Questions</Label>
-                        <button
-                          type="button"
-                          onClick={addQuizQuestion}
-                          className="flex items-center gap-1 text-sm text-cyan-700 font-medium"
-                        >
-                          <Plus className="w-4 h-4" /> Add question
-                        </button>
-                      </div>
-                      {activeModule.quiz_questions.length === 0 ? (
-                        <p className="text-sm text-slate-500">
-                          No questions yet. Add at least one for learners to take the quiz.
-                        </p>
-                      ) : (
-                        activeModule.quiz_questions.map((q, qi) => (
-                          <div
-                            key={q.id}
-                            className="space-y-2 rounded-xl border border-cyan-200 bg-white p-3"
-                          >
-                            <div className="flex justify-between gap-2">
-                              <span className="text-xs font-semibold text-cyan-800">Question {qi + 1}</span>
-                              <button
-                                type="button"
-                                onClick={() => removeQuizQuestion(q.id)}
-                                className="text-xs text-red-600 hover:underline"
-                              >
-                                Remove question
-                              </button>
-                            </div>
-                            <textarea
-                              value={q.prompt}
-                              onChange={(e) => updateQuizQuestion(q.id, e.target.value)}
-                              rows={2}
-                              placeholder="Question text"
-                              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                            />
-                            <p className="text-xs text-slate-600">Mark the correct answer:</p>
-                            <ul className="space-y-2">
-                              {q.options.map((o) => (
-                                <li key={o.id} className="flex items-start gap-2">
-                                  <input
-                                    type="radio"
-                                    name={`correct-${q.id}`}
-                                    className="mt-2"
-                                    checked={o.is_correct}
-                                    onChange={() => setCorrectOption(q.id, o.id)}
-                                    title="Correct answer"
-                                  />
-                                  <FieldInput
-                                    type="text"
-                                    value={o.label}
-                                    onChange={(e) => updateQuizOption(q.id, o.id, e.target.value)}
-                                    placeholder="Option text"
-                                    className="flex-1"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => removeQuizOption(q.id, o.id)}
-                                    className="text-slate-400 hover:text-red-600 text-sm px-1"
-                                  >
-                                    ×
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                            <button
-                              type="button"
-                              onClick={() => addQuizOption(q.id)}
-                              className="text-sm text-cyan-700 font-medium"
-                            >
-                              + Add option
-                            </button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Feedback: instructions only; learners submit on the lesson page */}
-                {activeModule.type === 'feedback' && (
-                  <div>
-                    <Label>Instructions</Label>
-                    <textarea
-                      value={activeModule.description}
-                      onChange={(e) => update({ description: e.target.value })}
-                      rows={4}
-                      placeholder="What feedback you want and how it will be used."
-                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <p className="text-xs text-slate-500 mt-1">
-                      Learners type feedback on the lesson page; submitting marks the lesson complete.
-                    </p>
-                  </div>
-                )}
-
-                {activeModule.type === 'assignment' && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="col-span-2">
-                      <Label>Instructions / description</Label>
-                      <textarea
-                        value={activeModule.assignment_description}
-                        onChange={(e) => update({ assignment_description: e.target.value })}
-                        rows={4}
-                        placeholder="What learners should submit and how it will be graded."
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <Label>Max Score</Label>
-                      <FieldInput
-                        type="number"
-                        value={activeModule.max_score}
-                        onChange={(e) => update({ max_score: Number(e.target.value) })}
-                      />
-                    </div>
-                    <div>
-                      <Label>Passing Score</Label>
-                      <FieldInput
-                        type="number"
-                        value={activeModule.passing_score}
-                        onChange={(e) => update({ passing_score: Number(e.target.value) })}
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <Label>Deadline (optional)</Label>
-                      <FieldInput
-                        type="datetime-local"
-                        value={activeModule.deadline_at}
-                        onChange={(e) => update({ deadline_at: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex h-full min-h-45 items-center justify-center rounded-xl border border-dashed border-slate-200 text-sm text-slate-400">
-                Select a lesson to configure it
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Action Row */}
-      <div className="sticky bottom-3 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
-        <div>
-          {courseId && (
-            <button
-              type="button"
-              onClick={() => setConfirmDeleteOpen(true)}
-              disabled={deleting || saving}
-              className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-50"
-            >
-              {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-              Delete course
-            </button>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {hasUnsavedChanges && !saved && (
-            <span className="text-sm font-medium text-amber-700">Unsaved changes</span>
-          )}
-          {saved && (
-            <span className="flex items-center gap-1.5 text-green-600 text-sm font-medium">
-              <CheckCircle2 className="w-4 h-4" /> Saved! Redirecting…
-            </span>
-          )}
-          {actionError && (
-            <span className="text-sm font-medium text-red-600" role="alert">
-              Something went wrong.
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={() => handleSave(false)}
-            disabled={saving || thumbnailUploading}
-            className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {courseId ? 'Save draft' : 'Save as Draft'}
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSave(true)}
-            disabled={saving || thumbnailUploading}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow transition hover:bg-blue-700 disabled:opacity-50"
-          >
-            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-            {courseId ? 'Publish' : 'Publish Course'}
-          </button>
-        </div>
-      </div>
+      {/* Confirmation Dialogs */}
       <ConfirmationDialog
         open={confirmDeleteOpen}
         title="Delete this course?"
-        description="This removes the course and all related lessons/data. This action cannot be undone."
-        confirmLabel="Delete course"
+        description="This removes the course and all related lessons and student progress permanently. This action cannot be undone."
+        confirmLabel="Delete Course"
         confirmVariant="danger"
         busy={deleting}
         onCancel={() => setConfirmDeleteOpen(false)}
         onConfirm={() => void handleDeleteCourse()}
       />
+
       <ConfirmationDialog
         open={!!confirmDeleteSection}
         title="Delete Section?"
         description={
           confirmDeleteSection
-            ? `Are you sure you want to delete "${confirmDeleteSection.title}"? This section contains ${confirmDeleteSection.lessonCount} lesson(s), which will also be deleted. This action cannot be undone.`
+            ? `Are you sure you want to delete "${confirmDeleteSection.title}"? This section contains ${confirmDeleteSection.lessonCount} lesson(s), which will also be deleted permanently.`
             : ''
         }
-        confirmLabel="Delete section and lessons"
+        confirmLabel="Delete Section & Lessons"
         confirmVariant="danger"
         onCancel={() => setConfirmDeleteSection(null)}
         onConfirm={() => {
