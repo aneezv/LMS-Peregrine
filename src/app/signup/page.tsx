@@ -3,6 +3,8 @@ import Image from 'next/image'
 import { ErrorAlert } from '@/components/ui/error-alert'
 import { signup } from './actions'
 import SignupSubmitButton from './SignupSubmitButton'
+import { GoogleSignInButton } from '@/components/google-signin-button'
+import { Separator } from '@/components/ui/separator'
 import {
   Card,
   CardContent,
@@ -57,16 +59,20 @@ export default async function SignupPage({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="mb-5 flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                <span className="text-slate-700">Already have an account?</span>
-                <Link
-                  href={loginHref}
-                  className="shrink-0 font-semibold text-primary underline-offset-4 hover:underline"
-                >
-                  Sign in &rarr;
-                </Link>
-              </div>
-              <form action={signup}>
+              <GoogleSignInButton nextUrl={redirectTo} className="mb-6" text="Sign up with Google" />
+
+              {/* <div className="relative mb-6">
+                <div className="absolute inset-0 flex items-center">
+                  <Separator />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">
+                    Or continue with email
+                  </span>
+                </div>
+              </div> */}
+
+              {/* <form action={signup}>
                 <input type="hidden" name="redirect" value={redirectTo} />
                 <FieldGroup>
                   {message ? <ErrorAlert>{message}</ErrorAlert> : null}
@@ -115,7 +121,13 @@ export default async function SignupPage({
                     <SignupSubmitButton />
                   </Field>
                 </FieldGroup>
-              </form>
+              </form> */}
+              <div className="mt-4 text-center text-sm">
+                Already have an account?{" "}
+                <Link href={loginHref} className="underline underline-offset-4">
+                  Sign in
+                </Link>
+              </div>
             </CardContent>
           </Card>
           <FieldDescription className="px-6 text-center">

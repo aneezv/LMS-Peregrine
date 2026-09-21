@@ -19,6 +19,8 @@ import Link from "next/link"
 import { login } from "@/app/login/actions"
 import LoginSubmitButton from "@/app/login/LoginSubmitButton"
 import { ErrorAlert } from "@/components/ui/error-alert"
+import { GoogleSignInButton } from "@/components/google-signin-button"
+import { Separator } from "@/components/ui/separator"
 
 interface LoginFormProps extends React.ComponentProps<"div"> {
   errorMessage?: string | null
@@ -50,15 +52,19 @@ export function LoginForm({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="mb-5 flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm">
-            <span className="text-slate-700">New here?</span>
-            <Link
-              href={signupHref}
-              className="shrink-0 font-semibold text-primary underline-offset-4 hover:underline"
-            >
-              Create an account &rarr;
-            </Link>
+          <GoogleSignInButton nextUrl={redirectTo} className="mb-6" />
+
+          <div className="relative mb-6">
+            <div className="absolute inset-0 flex items-center">
+              <Separator />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">
+                Or continue with email
+              </span>
+            </div>
           </div>
+
           <form action={login}>
             <input type="hidden" name="redirect" value={redirectTo ?? ''} />
             <FieldGroup>
@@ -92,6 +98,12 @@ export function LoginForm({
               </Field>
             </FieldGroup>
           </form>
+          <div className="mt-4 text-center text-sm">
+            New here?{" "}
+            <Link href={signupHref} className="underline underline-offset-4">
+              Create an account
+            </Link>
+          </div>
         </CardContent>
       </Card>
       <FieldDescription className="px-6 text-center">
