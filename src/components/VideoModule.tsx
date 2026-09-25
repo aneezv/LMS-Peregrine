@@ -191,7 +191,6 @@ export default function VideoModule({
   useEffect(() => {
     if (!provider || !embedId || !embedRef.current) return
 
-    const el = embedRef.current
     let cancelled = false
     let pollId: number | undefined
     let mo: MutationObserver | undefined
@@ -214,6 +213,17 @@ export default function VideoModule({
       }
     }
 
+    const plyrEl = document.createElement('div')
+    plyrEl.className = 'h-full w-full'
+    plyrEl.dataset.plyrProvider = provider
+    plyrEl.dataset.plyrEmbedId = embedId
+    
+    // Clean up any existing children and append the new element
+    if (embedRef.current) {
+      embedRef.current.innerHTML = ''
+      embedRef.current.appendChild(plyrEl)
+    }
+
     void (async () => {
       await import('plyr/dist/plyr.css')
       const { default: Plyr } = await import('plyr')
@@ -221,7 +231,8 @@ export default function VideoModule({
 
       const initialMuted = desiredMutedRef.current
 
-      player = new Plyr(el, {
+      player = new Plyr(plyrEl, {
+
         ratio: '16:9',
         autoplay: Boolean(autoplay),
         muted: initialMuted,
@@ -404,13 +415,7 @@ export default function VideoModule({
       <div
         className={`video-module-plyr-host relative aspect-video w-full rounded-xl overflow-hidden shadow-lg bg-black ${className}`.trim()}
       >
-        <div
-          key={`${moduleId || 'preview'}-${embedId}`}
-          ref={embedRef}
-          className="h-full w-full"
-          data-plyr-provider={provider}
-          data-plyr-embed-id={embedId}
-        />
+        <div ref={embedRef} className="h-full w-full" />
         {/* Veil rendered in React — auto-cleaned on unmount, no stale DOM */}
         <div className={veilClasses} />
         {renderUnmuteButton()}
